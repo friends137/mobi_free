@@ -1,0 +1,46 @@
+name: 编译莫比优化版 APK
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取源码
+        uses: actions/checkout@v4
+
+      - name: 安装Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装依赖
+        run: npm install
+
+      - name: 编译离线前端
+        run: npm run build
+
+      - name: 安装安卓编译工具
+        run: |
+          sudo apt update
+          sudo apt install -y openjdk-17-jdk android-sdk
+
+      - name: 下载定制图标
+        run: wget -O icon.png https://p.icons8.com/wp-content/uploads/2023/03/exercise-1024.png
+
+      - name: 打包安卓APK (离线版)
+        run: |
+          npm install -g @capacitor/cli
+          npx cap init @mobi/optimized "莫比优化版" --web-dir=dist
+          npx cap add android
+          mkdir -p android/app/src/main/res/drawable
+          cp icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
+          npx cap build android --release --keystore-debug
+
+      - name: 上传APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobi-optimized-apk
+          path: android/app/build/outputs/apk/release/*.apk
