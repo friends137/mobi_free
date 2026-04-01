@@ -1,6 +1,6 @@
-name: 莫比优化版 - 极速编译APK
+name: 莫比优化版 - 生成APK
 on:
-  workflow_dispatch:  # 手动点一下就编译
+  workflow_dispatch:
 
 jobs:
   build:
@@ -8,26 +8,41 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 编译项目（纯前端，离线包）
-      - name: 安装环境并编译
+      # 配置Node环境
+      - name: 设置Node.js
         uses: actions/setup-node@v4
-        with: { node-version: 20 }
-      - run: npm install
-      - run: npm run build
+        with:
+          node-version: 20
 
-      # 2. 下载图标（修复证书错误，稳定可用）
-      - name: 下载APP图标
-        run: wget -O icon.png https://raw.githubusercontent.com/iconic/open-iconic/master/png/loop-circular.png
-
-      # 3. 轻量打包APK（不装安卓SDK，极速！）
-      - name: 生成离线APK
+      # 编译项目离线前端包
+      - name: 安装依赖并编译
         run: |
-          npm install -g pwa-asset-generator
-          pwa-asset-generator icon.png ./assets
-          
-      # 4. 输出最终文件
+          npm install
+          npm run build
+
+      # 下载稳定图标（无证书错误）
+      - name: 下载APP图标
+        run: wget -O icon.png https://raw.githubusercontent.com/FortAwesome/Font-Awesome/master/svgs/solid/bicycle.svg
+
+      # 轻量打包APK（核心！极速，不装安卓SDK）
+      - name: 打包生成APK
+        uses: DrunckByte/pwa-to-apk@main
+        with:
+          manifest: |
+            {
+              "name": "莫比优化版",
+              "short_name": "莫比",
+              "start_url": "/",
+              "display": "standalone",
+              "background_color": "#ffffff",
+              "theme_color": "#1E40AF"
+            }
+          icon_path: icon.png
+          dist_folder: dist
+
+      # 上传最终APK文件
       - name: 上传APK安装包
         uses: actions/upload-artifact@v4
         with:
           name: 莫比优化版-离线APK
-          path: dist/
+          path: build/*.apk
