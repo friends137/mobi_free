@@ -19,22 +19,23 @@ jobs:
           npm install
           npm run build
 
-      - name: 安装打包工具
+      - name: 安装Capacitor打包工具
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: 初始化项目(名称：莫比优化版)
+      # ✅ 修复命令：中文名+标准英文包名，无任何报错
+      - name: 初始化项目
         run: |
-          npx cap init MobiOptimized "莫比优化版" --web-dir=dist
+          npx cap init "莫比优化版" "com.mobi.optimized" --web-dir=dist
           npx cap add android
 
-      - name: 编译APK
+      - name: 编译安卓APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: 上传APK
+      - name: 上传最终APK
         uses: actions/upload-artifact@v4
         with:
-          name: 莫比优化版-APK
+          name: 莫比优化版-正式APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
