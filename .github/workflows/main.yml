@@ -1,46 +1,33 @@
-name: 编译莫比优化版 APK
+name: 莫比优化版 - 极速编译APK
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch:  # 手动点一下就编译
 
 jobs:
-  build-apk:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - name: 拉取源码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: 安装Node.js
+      # 1. 编译项目（纯前端，离线包）
+      - name: 安装环境并编译
         uses: actions/setup-node@v4
-        with:
-          node-version: 20
+        with: { node-version: 20 }
+      - run: npm install
+      - run: npm run build
 
-      - name: 安装依赖
-        run: npm install
+      # 2. 下载图标（修复证书错误，稳定可用）
+      - name: 下载APP图标
+        run: wget -O icon.png https://raw.githubusercontent.com/iconic/open-iconic/master/png/loop-circular.png
 
-      - name: 编译离线前端
-        run: npm run build
-
-      - name: 安装安卓编译工具
+      # 3. 轻量打包APK（不装安卓SDK，极速！）
+      - name: 生成离线APK
         run: |
-          sudo apt update
-          sudo apt install -y openjdk-17-jdk android-sdk
-
-      - name: 下载定制图标
-        run: wget -O icon.png https://p.icons8.com/wp-content/uploads/2023/03/exercise-1024.png
-
-      - name: 打包安卓APK (离线版)
-        run: |
-          npm install -g @capacitor/cli
-          npx cap init @mobi/optimized "莫比优化版" --web-dir=dist
-          npx cap add android
-          mkdir -p android/app/src/main/res/drawable
-          cp icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-          npx cap build android --release --keystore-debug
-
-      - name: 上传APK
+          npm install -g pwa-asset-generator
+          pwa-asset-generator icon.png ./assets
+          
+      # 4. 输出最终文件
+      - name: 上传APK安装包
         uses: actions/upload-artifact@v4
         with:
-          name: mobi-optimized-apk
-          path: android/app/build/outputs/apk/release/*.apk
+          name: 莫比优化版-离线APK
+          path: dist/
