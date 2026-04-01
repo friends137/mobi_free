@@ -1,4 +1,4 @@
-name: 莫比优化版 - 纯GitHub编译APK
+name: 莫比优化版 - 修复空白APK
 on:
   workflow_dispatch:
 
@@ -6,42 +6,40 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: 拉取源码
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: 配置Node.js 20
         uses: actions/setup-node@v4
-        with:
-          node-version: 20
+        with: { node-version: 20 }
 
-      # ✅ 核心修复：直接用Java 21，完美兼容Capacitor
       - name: 配置Java 21
         uses: actions/setup-java@v4
         with:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: 编译前端离线包
+      - name: 安装依赖+编译
         run: |
           npm install
           npm run build
 
-      - name: 安装Capacitor打包工具
+      - name: 安装打包工具
         run: npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
 
-      - name: 初始化安卓项目
+      - name: 初始化项目
         run: |
           npx cap init "莫比优化版" "com.mobi.optimized" --web-dir=dist
           npx cap add android
+          npx cap sync # 同步资源，修复加载
 
-      - name: 构建安卓安装包
+      - name: 编译APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: 上传APK文件
+      - name: 上传APK
         uses: actions/upload-artifact@v4
         with:
-          name: 莫比优化版-APK
+          name: 莫比优化版-最终APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
