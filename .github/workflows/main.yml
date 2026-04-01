@@ -4,44 +4,37 @@ on:
 
 jobs:
   build:
-    # GitHub官方自带安卓/Java环境，极速编译
     runs-on: ubuntu-latest
     steps:
       - name: 拉取源码
         uses: actions/checkout@v4
 
-      - name: 配置Node.js环境
+      - name: 配置Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: 安装依赖 + 编译离线前端
+      - name: 编译离线前端
         run: |
           npm install
           npm run build
 
-      - name: 下载稳定图标（GitHub官方源，永不报错）
-        run: wget -O app-icon.png https://raw.githubusercontent.com/ionic-team/ionicons/main/png/ios-bicycle.png
-
-      - name: 安装Capacitor（官方安卓打包工具）
+      - name: 安装打包工具
         run: npm install @capacitor/core @capacitor/cli @capacitor/android
 
-      - name: 初始化安卓项目
+      - name: 初始化项目(名称：莫比优化版)
         run: |
-          npx cap init Mobioffice "莫比优化版" --web-dir=dist
+          npx cap init MobiOptimized "莫比优化版" --web-dir=dist
           npx cap add android
 
-      - name: 替换APP图标
-        run: cp app-icon.png android/app/src/main/res/mipmap-xxxhdpi/ic_launcher.png
-
-      - name: 编译生成APK（官方调试包，直接安装）
+      - name: 编译APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: 上传最终APK安装包
+      - name: 上传APK
         uses: actions/upload-artifact@v4
         with:
-          name: 莫比优化版-正式APK
+          name: 莫比优化版-APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
