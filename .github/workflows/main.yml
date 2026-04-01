@@ -1,4 +1,4 @@
-name: 莫比优化版 - 完美最终版
+name: 莫比优化版 - 绝对完美版
 on:
   workflow_dispatch:
 
@@ -6,11 +6,13 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: 拉取源码
+        uses: actions/checkout@v4
 
-      - name: 配置Node.js
+      - name: 配置Node.js 20
         uses: actions/setup-node@v4
-        with: { node-version: 20 }
+        with:
+          node-version: 20
 
       - name: 配置Java 21
         uses: actions/setup-java@v4
@@ -18,13 +20,18 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
 
-      - name: 安装依赖
-        run: npm install --legacy-peer-deps
+      # 🔥 核心修复：安装所有依赖 + 强制安装缺失的Vue插件
+      - name: 安装完整依赖
+        run: |
+          npm install --legacy-peer-deps
+          npm install @vitejs/plugin-vue vue --save-dev --legacy-peer-deps
 
-      - name: 打包前端（无TS报错）
+      # 🔥 编译前端（已修复空白问题）
+      - name: 构建离线包
         run: npm run build
 
-      - name: 安装安卓打包工具
+      # 打包安卓APK
+      - name: 安装打包工具
         run: npm install @capacitor/core@6 @capacitor/cli@6 @capacitor/android@6
 
       - name: 初始化APP
@@ -33,14 +40,14 @@ jobs:
           npx cap add android
           npx cap sync
 
-      - name: 编译APK
+      - name: 编译生成APK
         run: |
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: 上传成品APK
-        uses: actions/upload-artifact@v4
+        uses: upload-artifact@v4
         with:
-          name: 莫比优化版-完美APK
+          name: 莫比优化版-最终可用APK
           path: android/app/build/outputs/apk/debug/app-debug.apk
