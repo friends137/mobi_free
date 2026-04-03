@@ -18,7 +18,7 @@ import { useWakeLock } from './hooks/useWakeLock';
 import { logEvent } from './services/analytics';
 
 /**
- * --- UI 组件 ---
+ * UI 组件
  */
 type StatCardProps = {
   title: string;
@@ -61,7 +61,7 @@ const formatTime = (seconds: number) => {
 };
 
 /**
- * --- 主应用组件 ---
+ * 主应用
  */
 export default function App() {
   const { isConnected, stats, error, connect, disconnect, setResistance, logs } = useBluetooth();
@@ -123,14 +123,13 @@ export default function App() {
       <main className="w-full space-y-6">
         {error && (
           <div className="bg-rose-500/10 border border-rose-500/20 rounded-3xl p-6 flex gap-4 items-start">
-            <Info className="text-rose-500 w-6 h-6 shrink-0 mt-0.5" />
             <div className="text-sm text-rose-200/70 leading-relaxed">
               {error}
             </div>
           </div>
         )}
-        
-        {/* 数据面板 + 新增实时心率 */}
+
+        {/* 数据面板 + 实时心率 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             title="瞬时功率"
@@ -178,7 +177,7 @@ export default function App() {
           />
         </div>
 
-        {/* 阻力控制面板 */}
+        {/* 阻力调节 */}
         <div className="bg-zinc-900 rounded-[2.5rem] p-6 sm:p-8 border border-white/5 shadow-2xl">
           <div className="flex justify-between items-end mb-8">
             <div>
@@ -226,10 +225,9 @@ export default function App() {
           </div>
         </div>
 
-        {/* 连接说明 */}
+        {/* 连接提示 */}
         {!isConnected && (
           <div className="bg-blue-500/5 border border-blue-500/10 rounded-3xl p-6 flex gap-4 items-start">
-            <Info className="text-blue-500 w-6 h-6 shrink-0 mt-0.5" />
             <div className="text-sm text-blue-200/60 leading-relaxed">
               <p className="font-bold text-blue-400 mb-1 tracking-tight">连接说明</p>
               请确保您的椭圆机处于开机状态，且未被其他 App 连接。点击上方按钮扫描并选择您的设备即可。
@@ -237,7 +235,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 调试日志 */}
+        {/* Debug Log */}
         {!isConnected && (
           <div className="mt-8 p-4 bg-zinc-900 rounded-2xl border border-zinc-800 text-xs font-mono text-zinc-500 overflow-hidden">
             <div className="mb-2 font-bold uppercase tracking-wider text-zinc-600 flex justify-between">
@@ -259,7 +257,7 @@ export default function App() {
         )}
       </main>
 
-      {/* 清空页脚，无任何多余内容 */}
+      {/* 页脚：彻底清空，什么都不留 */}
       <footer className="w-full mt-12 mb-8"></footer>
     </div>
   );
