@@ -8,20 +8,14 @@ import {
   RotateCcw,
   Plus,
   Minus,
-  Info,
   Timer,
   Flame,
   MapPin,
-  Github,
   Heart,
-  X,
-  MessageCircle
 } from 'lucide-react';
 import { useBluetooth } from './hooks/useBluetooth';
 import { useWakeLock } from './hooks/useWakeLock';
 import { logEvent } from './services/analytics';
-import alipayQR from './assets/alipay.jpg';
-
 
 /**
  * --- UI 组件 ---
@@ -71,26 +65,17 @@ const formatTime = (seconds: number) => {
  */
 export default function App() {
   const { isConnected, stats, error, connect, disconnect, setResistance, logs } = useBluetooth();
-  useWakeLock(isConnected); // 仅在连接设备时保持屏幕常亮
+  useWakeLock(isConnected);
   const [uiResistance, setUiResistance] = useState(10);
   const [ignoreRemoteUpdatesUntil, setIgnoreRemoteUpdatesUntil] = useState(0);
-  const [showDonation, setShowDonation] = useState(false);
-  const [showFeedback, setShowFeedback] = useState(false);
-
   const [isDragging, setIsDragging] = useState(false);
 
   useEffect(() => {
     logEvent('APP_OPEN');
   }, []);
 
-  // 初始连接时同步机器阻力值
   useEffect(() => {
     const now = Date.now();
-    // 只在以下情况更新 UI：
-    // 1. 机器返回了有效值
-    // 2. 当前不在「忽略远程更新」的时间窗口内
-    // 3. 值确实不同
-    // 4. 用户不在拖拽滑块中
     if (!isDragging &&
       stats.resistanceLevel &&
       now > ignoreRemoteUpdatesUntil &&
@@ -103,11 +88,8 @@ export default function App() {
     const safeLevel = Math.min(Math.max(level, 1), 24);
 
     try {
-      // 立即更新 UI（乐观更新）
       setUiResistance(safeLevel);
-      // 忽略接下来 1 秒内的机器返回值，避免因延迟导致的闪烁
       setIgnoreRemoteUpdatesUntil(Date.now() + 1000);
-
       await setResistance(safeLevel);
       if ('vibrate' in navigator) navigator.vibrate(50);
     } catch (e) {
@@ -139,21 +121,6 @@ export default function App() {
       </header>
 
       <main className="w-full space-y-6">
-        {/* 开源部署提示 */}
-        <div className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 rounded-3xl p-4 flex gap-3 items-center">
-          <Info className="text-blue-400 w-5 h-5 shrink-0" />
-          <div className="text-sm text-blue-200/80 leading-relaxed flex-1">
-            <span className="font-bold text-blue-300">代码开源</span>，推荐部署自己的版本
-          </div>
-          <a
-            href="https://github.com/z-hhh/mobi_free?tab=readme-ov-file#-%E9%83%A8%E7%BD%B2%E5%88%B0-github-pages"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="px-4 py-1.5 bg-blue-500/20 hover:bg-blue-500/30 border border-blue-400/30 rounded-full text-xs font-bold text-blue-300 hover:text-blue-200 transition-all whitespace-nowrap"
-          >
-            查看教程
-          </a>
-        </div>
         {error && (
           <div className="bg-rose-500/10 border border-rose-500/20 rounded-3xl p-6 flex gap-4 items-start">
             <Info className="text-rose-500 w-6 h-6 shrink-0 mt-0.5" />
@@ -162,7 +129,8 @@ export default function App() {
             </div>
           </div>
         )}
-        {/* 数据面板 */}
+        
+        {/* 数据面板 + 新增实时心率 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             title="瞬时功率"
@@ -170,6 +138,12 @@ export default function App() {
             unit="W"
             icon={<Zap className="text-amber-500 w-4 h-4" />}
             highlight
+          />
+          <StatCard
+            title="实时心率"
+            value={stats.heartRate ?? 0}
+            unit="BPM"
+            icon={<Heart className="text-red-500 w-4 h-4" />}
           />
           <StatCard
             title="实时踏频"
@@ -252,20 +226,18 @@ export default function App() {
           </div>
         </div>
 
-        {/* 帮助信息 */}
-        {
-          !isConnected && (
-            <div className="bg-blue-500/5 border border-blue-500/10 rounded-3xl p-6 flex gap-4 items-start">
-              <Info className="text-blue-500 w-6 h-6 shrink-0 mt-0.5" />
-              <div className="text-sm text-blue-200/60 leading-relaxed">
-                <p className="font-bold text-blue-400 mb-1 tracking-tight">连接说明</p>
-                请确保您的椭圆机处于开机状态，且未被其他 App（如官方 App）连接。点击上方按钮扫描并选择您的设备即可开始（需要同意蓝牙权限）。
-              </div>
+        {/* 连接说明 */}
+        {!isConnected && (
+          <div className="bg-blue-500/5 border border-blue-500/10 rounded-3xl p-6 flex gap-4 items-start">
+            <Info className="text-blue-500 w-6 h-6 shrink-0 mt-0.5" />
+            <div className="text-sm text-blue-200/60 leading-relaxed">
+              <p className="font-bold text-blue-400 mb-1 tracking-tight">连接说明</p>
+              请确保您的椭圆机处于开机状态，且未被其他 App 连接。点击上方按钮扫描并选择您的设备即可。
             </div>
-          )
-        }
+          </div>
+        )}
 
-        {/* 调试日志 (仅在非连接状态或有错误时显示，或者始终显示以帮助调试) */}
+        {/* 调试日志 */}
         {!isConnected && (
           <div className="mt-8 p-4 bg-zinc-900 rounded-2xl border border-zinc-800 text-xs font-mono text-zinc-500 overflow-hidden">
             <div className="mb-2 font-bold uppercase tracking-wider text-zinc-600 flex justify-between">
@@ -285,109 +257,10 @@ export default function App() {
             </div>
           </div>
         )}
-      </main >
+      </main>
 
-      {/* 页脚 */}
-      <footer className="w-full mt-12 mb-8">
-        <div className="flex justify-center items-center gap-4 mb-4">
-          <a
-            href="https://github.com/z-hhh/mobi_free"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-all text-sm font-bold text-zinc-300 hover:text-white"
-          >
-            <Github size={16} />
-            GitHub
-          </a>
-          <button
-            onClick={() => setShowFeedback(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-full transition-all text-sm font-bold text-zinc-300 hover:text-white"
-          >
-            <MessageCircle size={16} />
-            问题反馈
-          </button>
-          <button
-            onClick={() => setShowDonation(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-pink-500 to-rose-500 hover:from-pink-600 hover:to-rose-600 rounded-full transition-all text-sm font-bold text-white shadow-lg hover:shadow-xl"
-          >
-            <Heart size={16} fill="currentColor" />
-            捐助本项目
-          </button>
-        </div>
-        <p className="text-zinc-700 text-[10px] font-bold uppercase tracking-[0.2em] text-center">
-          Powered by Web Bluetooth API & Open Source
-        </p>
-        <p className="text-zinc-800 text-[9px] font-mono text-center mt-2 opacity-50">
-          v{__APP_VERSION__} | Build: {__BUILD_TIME__} | Commit: {__COMMIT_HASH__}
-        </p>
-      </footer>
-
-      {/* 捐助弹窗 */}
-      {showDonation && (
-        <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowDonation(false)}
-        >
-          <div
-            className="bg-zinc-900 rounded-3xl p-8 max-w-sm w-full border border-white/10 shadow-2xl relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowDonation(false)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"
-            >
-              <X size={24} />
-            </button>
-            <h3 className="text-2xl font-black mb-2 text-center">感谢支持 ❤️</h3>
-            <p className="text-zinc-500 text-sm text-center mb-6">
-              您的支持是我持续开发的动力
-            </p>
-            <div className="bg-white p-4 rounded-2xl">
-              <img
-                src={alipayQR}
-                alt="支付宝收款码"
-                className="w-full h-auto rounded-lg"
-              />
-            </div>
-            <p className="text-zinc-600 text-xs text-center mt-4">
-              使用支付宝扫码赞助
-            </p>
-          </div>
-        </div>
-      )}
-
-      {/* 反馈弹窗 */}
-      {showFeedback && (
-        <div
-          className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
-          onClick={() => setShowFeedback(false)}
-        >
-          <div
-            className="bg-zinc-900 rounded-3xl p-8 max-w-sm w-full border border-white/10 shadow-2xl relative"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              onClick={() => setShowFeedback(false)}
-              className="absolute top-4 right-4 text-zinc-500 hover:text-white transition-colors"
-            >
-              <X size={24} />
-            </button>
-            <h3 className="text-2xl font-black mb-2 text-center">问题反馈</h3>
-            <p className="text-zinc-500 text-sm text-center mb-6">
-              加入 QQ 群反馈问题或交流
-            </p>
-            <div className="bg-zinc-800 p-6 rounded-2xl text-center">
-              <div className="text-zinc-400 text-sm mb-2">QQ 群号</div>
-              <div className="text-3xl font-black text-white tracking-widest select-all">
-                1073767295
-              </div>
-            </div>
-            <p className="text-zinc-600 text-xs text-center mt-4">
-              点击群号可复制
-            </p>
-          </div>
-        </div>
-      )}
-    </div >
+      {/* 清空页脚，无任何多余内容 */}
+      <footer className="w-full mt-12 mb-8"></footer>
+    </div>
   );
 }
