@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Activity,
   Zap,
@@ -12,10 +12,24 @@ import {
   Flame,
   MapPin,
   Heart,
+  History,
+  Trash2,
 } from 'lucide-react';
 import { useBluetooth } from './hooks/useBluetooth';
 import { useWakeLock } from './hooks/useWakeLock';
 import { logEvent } from './services/analytics';
+
+// 运动记录类型定义
+interface WorkoutRecord {
+  id: string;
+  date: string;
+  duration: string;
+  kcal: number;
+  distance: string;
+  avgHeartRate: number;
+  maxHeartRate: number;
+  resistance: number;
+}
 
 /**
  * UI 组件
@@ -60,33 +74,63 @@ const formatTime = (seconds: number) => {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
-/**
- * 主应用
- */
+// 本地存储工具
+const STORAGE_KEY = 'MOBI_WORKOUT_HISTORY';
+const saveHistory = (data: WorkoutRecord[]) => {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+};
+const loadHistory = (): WorkoutRecord[] => {
+  const data = localStorage.getItem(STORAGE_KEY);
+  return data ? JSON.parse(data) : [];
+};
+
 export default function App() {
   const { isConnected, stats, error, connect, disconnect, setResistance, logs } = useBluetooth();
   useWakeLock(isConnected);
   const [uiResistance, setUiResistance] = useState(10);
   const [ignoreRemoteUpdatesUntil, setIgnoreRemoteUpdatesUntil] = useState(0);
   const [isDragging, setIsDragging] = useState(false);
+  const [workoutHistory, setWorkoutHistory] = useState<WorkoutRecord[]>([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const maxHeartRateRef = useRef<number>(0);
 
+  // 加载历史记录
   useEffect(() => {
-    logEvent('APP_OPEN');
+    setWorkoutHistory(loadHistory());
   }, []);
 
+  // 追踪最大心率
   useEffect(() => {
-    const now = Date.now();
-    if (!isDragging &&
-      stats.resistanceLevel &&
-      now > ignoreRemoteUpdatesUntil &&
-      stats.resistanceLevel !== uiResistance) {
-      setUiResistance(Math.round(stats.resistanceLevel));
+    if (isConnected && stats.heartRate && stats.heartRate > 0) {
+      if (stats.heartRate > maxHeartRateRef.current) {
+        maxHeartRateRef.current = stats.heartRate;
+      }
     }
-  }, [stats.resistanceLevel, uiResistance, ignoreRemoteUpdatesUntil, isDragging]);
+  }, [stats.heartRate, isConnected]);
+
+  // 断开连接时自动保存运动记录
+  useEffect(() => {
+    if (!isConnected && stats.elapsedTime && stats.elapsedTime > 10) {
+      const record: WorkoutRecord = {
+        id: Date.now().toString(),
+        date: new Date().toLocaleString(),
+        duration: formatTime(stats.elapsedTime),
+        kcal: Math.round(stats.kcal || 0),
+        distance: ((stats.totalDistance || 0) / 1000).toFixed(2),
+        avgHeartRate: Math.round(stats.heartRate || 0),
+        maxHeartRate: maxHeartRateRef.current,
+        resistance: uiResistance,
+      };
+
+      const newHistory = [record, ...workoutHistory];
+      setWorkoutHistory(newHistory);
+      saveHistory(newHistory);
+      maxHeartRateRef.current = 0;
+    }
+  }, [isConnected]);
 
   const updateResistance = useCallback(async (level: number) => {
     const safeLevel = Math.min(Math.max(level, 1), 24);
-
     try {
       setUiResistance(safeLevel);
       setIgnoreRemoteUpdatesUntil(Date.now() + 1000);
@@ -99,6 +143,14 @@ export default function App() {
 
   const handleManualAdjust = (delta: number) => {
     updateResistance(uiResistance + delta);
+  };
+
+  // 清空历史记录
+  const clearHistory = () => {
+    if (confirm('确定要清空所有运动记录吗？')) {
+      setWorkoutHistory([]);
+      saveHistory([]);
+    }
   };
 
   return (
@@ -129,7 +181,7 @@ export default function App() {
           </div>
         )}
 
-        {/* 数据面板 + 实时心率 */}
+        {/* 数据面板 */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatCard
             title="瞬时功率"
@@ -225,6 +277,69 @@ export default function App() {
           </div>
         </div>
 
+        {/* 运动历史记录 */}
+        <div className="bg-zinc-900 rounded-[2.5rem] p-6 sm:p-8 border border-white/5 shadow-2xl">
+          <div className="flex justify-between items-center mb-4">
+            <div className="flex items-center gap-2">
+              <History className="text-blue-400 w-5 h-5" />
+              <h2 className="text-lg font-bold">运动历史记录</h2>
+            </div>
+            <div className="flex gap-2">
+              <button 
+                onClick={() => setShowHistory(!showHistory)}
+                className="text-sm text-zinc-400 hover:text-white"
+              >
+                {showHistory ? '收起' : '展开'}
+              </button>
+              <button 
+                onClick={clearHistory}
+                className="text-sm text-rose-500 hover:text-rose-400"
+              >
+                <Trash2 size={16} />
+              </button>
+            </div>
+          </div>
+
+          {showHistory && (
+            <div className="max-h-96 overflow-y-auto space-y-3 mt-4">
+              {workoutHistory.length === 0 ? (
+                <div className="text-center text-zinc-500 py-8">暂无运动记录</div>
+              ) : (
+                workoutHistory.map((item) => (
+                  <div key={item.id} className="p-4 bg-zinc-800/50 rounded-xl border border-white/5">
+                    <div className="flex justify-between text-sm text-zinc-400 mb-2">
+                      <span>{item.date}</span>
+                      <span>阻力 L{item.resistance}</span>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <div className="text-zinc-500">时长</div>
+                        <div className="font-bold">{item.duration}</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">热量</div>
+                        <div className="font-bold">{item.kcal} kcal</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">距离</div>
+                        <div className="font-bold">{item.distance} km</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">平均心率</div>
+                        <div className="font-bold text-red-400">{item.avgHeartRate} BPM</div>
+                      </div>
+                      <div>
+                        <div className="text-zinc-500">最大心率</div>
+                        <div className="font-bold text-rose-500">{item.maxHeartRate} BPM</div>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+
         {/* 连接提示 */}
         {!isConnected && (
           <div className="bg-blue-500/5 border border-blue-500/10 rounded-3xl p-6 flex gap-4 items-start">
@@ -234,31 +349,7 @@ export default function App() {
             </div>
           </div>
         )}
-
-        {/* Debug Log */}
-        {!isConnected && (
-          <div className="mt-8 p-4 bg-zinc-900 rounded-2xl border border-zinc-800 text-xs font-mono text-zinc-500 overflow-hidden">
-            <div className="mb-2 font-bold uppercase tracking-wider text-zinc-600 flex justify-between">
-              <span>Debug Log</span>
-              <span className="text-zinc-700">{logs.length} events</span>
-            </div>
-            <div className="h-32 overflow-y-auto space-y-1">
-              {logs.length === 0 ? (
-                <div className="text-zinc-700 italic">No logs yet...</div>
-              ) : (
-                logs.map((log, i) => (
-                  <div key={i} className="break-all border-b border-zinc-800/50 pb-0.5 mb-0.5 last:border-0">
-                    {log}
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        )}
       </main>
-
-      {/* 页脚：彻底清空，什么都不留 */}
-      <footer className="w-full mt-12 mb-8"></footer>
     </div>
   );
 }
