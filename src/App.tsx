@@ -1,23 +1,8 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  Activity,
-  Zap,
-  Gauge,
-  Bluetooth,
-  BluetoothOff,
-  RotateCcw,
-  Plus,
-  Minus,
-  Timer,
-  Flame,
-  MapPin,
-  Heart,
-  History,
-  Trash2,
-  Download,
-  Upload,
-  Play,
-  StopCircle,
+  Activity, Zap, Gauge, Bluetooth, BluetoothOff, RotateCcw,
+  Plus, Minus, Timer, Flame, MapPin, Heart, History, Trash2,
+  Download, Upload, Play, StopCircle,
 } from 'lucide-react';
 import { useBluetooth } from './hooks/useBluetooth';
 import { useWakeLock } from './hooks/useWakeLock';
@@ -42,8 +27,8 @@ const formatTime = (seconds: number) => {
 const STORAGE_KEY = 'MOBI_WORKOUT_HISTORY';
 const saveHistory = (data: WorkoutRecord[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
 const loadHistory = (): WorkoutRecord[] => {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
+  const d = localStorage.getItem(STORAGE_KEY);
+  return d ? JSON.parse(d) : [];
 };
 
 export default function App() {
@@ -52,8 +37,8 @@ export default function App() {
   
   const [uiResistance, setUiResistance] = useState(10);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutRecord[]>([]);
-  const [showHistory] = useState(true);
   const maxHeartRateRef = useRef<number>(0);
+  const [validHeartRates, setValidHeartRates] = useState<number[]>([]);
   
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [manualElapsedTime, setManualElapsedTime] = useState(0);
@@ -62,12 +47,19 @@ export default function App() {
 
   useEffect(() => { setWorkoutHistory(loadHistory()); }, []);
 
+  // 记录最大心率 & 收集有效心率
   useEffect(() => {
-    if (isConnected && stats.heartRate && stats.heartRate > 0) {
-      if (stats.heartRate > maxHeartRateRef.current) maxHeartRateRef.current = stats.heartRate;
+    if (isConnected && stats.heartRate > 0) {
+      if (stats.heartRate > maxHeartRateRef.current) {
+        maxHeartRateRef.current = stats.heartRate;
+      }
+      if (isWorkoutActive) {
+        setValidHeartRates(prev => [...prev, stats.heartRate]);
+      }
     }
-  }, [stats.heartRate, isConnected]);
+  }, [stats.heartRate, isConnected, isWorkoutActive]);
 
+  // 手动计时
   useEffect(() => {
     if (isWorkoutActive) {
       timerRef.current = setInterval(() => setManualElapsedTime(p => p + 1), 1000);
@@ -77,85 +69,110 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isWorkoutActive]);
 
+  // 停止时保存记录（真实平均心率）
   const saveWorkoutRecord = useCallback(() => {
-    const duration = manualElapsedTime > 10 ? manualElapsedTime : (stats.elapsedTime || 0);
-    if (duration < 10) return;
+    const durationSec = manualElapsedTime > 10 ? manualElapsedTime : (stats.elapsedTime || 0);
+    if (durationSec < 10) return;
+
+    const valid = validHeartRates.filter(h => h > 0 && h < 250);
+    const avgHR = valid.length ? Math.round(valid.reduce((a,b)=>a+b,0)/valid.length) : 0;
+
     const record: WorkoutRecord = {
       id: Date.now().toString(),
       date: new Date().toLocaleString(),
-      duration: formatTime(duration),
+      duration: formatTime(durationSec),
       kcal: Math.round(stats.kcal || 0),
       distance: ((stats.totalDistance || 0) / 1000).toFixed(2),
-      avgHeartRate: Math.round(stats.heartRate || 0),
+      avgHeartRate: avgHR,
       maxHeartRate: maxHeartRateRef.current,
       resistance: uiResistance,
     };
+
     const newHistory = [record, ...workoutHistory];
     setWorkoutHistory(newHistory);
     saveHistory(newHistory);
+    
     maxHeartRateRef.current = 0;
-  }, [manualElapsedTime, stats, workoutHistory, uiResistance]);
+    setValidHeartRates([]);
+  }, [manualElapsedTime, stats, workoutHistory, uiResistance, validHeartRates]);
 
+  // 蓝牙断开自动保存
   useEffect(() => {
-    if (!isConnected && isWorkoutActive) { setIsWorkoutActive(false); saveWorkoutRecord(); }
+    if (!isConnected && isWorkoutActive) {
+      setIsWorkoutActive(false);
+      saveWorkoutRecord();
+    }
   }, [isConnected]);
 
   const updateResistance = useCallback(async (level: number) => {
-    const safeLevel = Math.min(Math.max(level, 1), 24);
-    try { setUiResistance(safeLevel); await setResistance(safeLevel); } catch (e) {}
+    const v = Math.min(Math.max(level,1),24);
+    try { setUiResistance(v); await setResistance(v); } catch {}
   }, [setResistance]);
 
-  const handleStartWorkout = () => {
+  const handleStart = () => {
     if (!isConnected) { alert('请先连接椭圆机'); return; }
-    setManualElapsedTime(0); setIsWorkoutActive(true); maxHeartRateRef.current = 0;
+    setManualElapsedTime(0);
+    setIsWorkoutActive(true);
+    maxHeartRateRef.current = 0;
+    setValidHeartRates([]);
   };
 
-  const handleStopWorkout = () => { setIsWorkoutActive(false); saveWorkoutRecord(); };
-  const clearHistory = () => { if (confirm('确定清空所有记录？')) { setWorkoutHistory([]); saveHistory([]); } };
-  const handleExport = () => {
-    const data = JSON.stringify(workoutHistory, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.download = `mobi-workout-${new Date().toISOString().slice(0,10)}.json`;
-    a.href = url; a.click(); URL.revokeObjectURL(url);
+  const handleStop = () => {
+    setIsWorkoutActive(false);
+    saveWorkoutRecord();
   };
+
+  const clearHistory = () => {
+    if (confirm('确定清空所有记录？')) {
+      setWorkoutHistory([]);
+      saveHistory([]);
+    }
+  };
+
+  const handleExport = () => {
+    const blob = new Blob([JSON.stringify(workoutHistory, null, 2)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.download = `mobi-${new Date().toISOString().slice(0,10)}.json`;
+    a.href = URL.createObjectURL(blob);
+    a.click();
+    URL.revokeObjectURL(a.href);
+  };
+
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const r = new FileReader();
+    r.onload = (ev) => {
       try {
-        const imported = JSON.parse(ev.target?.result as string);
-        if (!Array.isArray(imported)) throw new Error();
-        const valid = imported.filter(i => i.id && i.date);
-        if (valid.length && confirm(`导入 ${valid.length} 条记录？`)) {
-          setWorkoutHistory([...valid, ...workoutHistory]);
-          saveHistory([...valid, ...workoutHistory]);
-          alert('导入成功！');
+        const arr = JSON.parse(ev.target?.result as string);
+        if (Array.isArray(arr) && confirm(`导入 ${arr.length} 条记录？`)) {
+          setWorkoutHistory([...arr, ...workoutHistory]);
+          saveHistory([...arr, ...workoutHistory]);
+          alert('导入成功');
         }
-      } catch { alert('导入失败'); }
+      } catch { alert('文件错误'); }
     };
-    reader.readAsText(file); e.target.value = '';
+    r.readAsText(f);
+    e.target.value = '';
   };
 
   const displayTime = isWorkoutActive ? manualElapsedTime : (stats.elapsedTime || 0);
 
   return (
-    <div className="min-h-screen bg-neutral-950 text-white p-2 font-sans">
-      {/* 顶部：MOBI + 启停 + 连接 */}
+    <div className="min-h-screen bg-black text-white p-2 font-sans">
+      {/* 顶部：MOBI + 开始/停止 + 连接 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-black text-xl">MOBI</h1>
+          <h1 className="font-bold text-xl">MOBI</h1>
         </div>
-        <div className="flex gap-1 flex-1 max-w-[180px]">
-          <button onClick={handleStartWorkout} disabled={isWorkoutActive || !isConnected} 
-            className="flex-1 h-9 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:bg-zinc-800 text-xs font-bold flex items-center justify-center gap-1">
+        <div className="flex gap-1 flex-1 max-w-[170px]">
+          <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
+            className="flex-1 h-9 rounded-xl bg-emerald-600 text-xs font-bold flex items-center justify-center gap-1">
             <Play size={14} />开始
           </button>
-          <button onClick={handleStopWorkout} disabled={!isWorkoutActive} 
-            className="flex-1 h-9 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:bg-zinc-800 text-xs font-bold flex items-center justify-center gap-1">
+          <button onClick={handleStop} disabled={!isWorkoutActive} 
+            className="flex-1 h-9 rounded-xl bg-rose-600 text-xs font-bold flex items-center justify-center gap-1">
             <StopCircle size={14} />停止
           </button>
         </div>
@@ -169,60 +186,57 @@ export default function App() {
       <main className="space-y-2">
         {error && <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-2 text-xs">{error}</div>}
 
-        {/* 极精简数据面板 */}
-        <div className="space-y-2">
-          {/* 行1：瞬时功率 + 时长 */}
-          <div className="flex gap-2">
-            <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <Zap className='text-amber-500 w-3 h-3' /> 瞬时功率
-              </div>
-              <div className='text-3xl font-bold'>{stats.instantPower ?? 0} <span className='text-zinc-600 text-xs'>W</span></div>
+        {/* 行1：瞬时功率 + 时长 */}
+        <div className="flex gap-2">
+          <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <Zap className='text-amber-500 w-3 h-3' /> 瞬时功率
             </div>
-            <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <Timer className='text-purple-400 w-3 h-3' /> 时长
-              </div>
-              <div className='text-3xl font-bold'>{formatTime(displayTime)}</div>
-            </div>
+            <div className='text-3xl font-bold'>{stats.instantPower ?? 0} <span className='text-zinc-600 text-xs'>W</span></div>
           </div>
-
-          {/* 行2：心率 + 热量 */}
-          <div className="flex gap-2">
-            <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <Heart className='text-red-500 w-3 h-3' /> 心率
-              </div>
-              <div className='text-3xl font-bold'>{stats.heartRate ?? 0} <span className='text-zinc-600 text-xs'>BPM</span></div>
+          <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <Timer className='text-purple-400 w-3 h-3' /> 时长
             </div>
-            <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <Flame className='text-orange-500 w-3 h-3' /> 热量
-              </div>
-              <div className='text-3xl font-bold'>{(stats.kcal ?? 0).toFixed(0)} <span className='text-zinc-600 text-xs'>KCAL</span></div>
-            </div>
+            <div className='text-3xl font-bold'>{formatTime(displayTime)}</div>
           </div>
+        </div>
 
-          {/* 行3：踏频 + 速度 + 距离 */}
-          <div className="flex gap-2">
-            <div className='w-[33%] bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <RotateCcw className='text-blue-400 w-3 h-3' /> 踏频
-              </div>
-              <div className='text-3xl font-bold'>{stats.instantCadence ?? 0} <span className='text-zinc-600 text-xs'>RPM</span></div>
+        {/* 行2：心率（瞬时） + 热量 */}
+        <div className="flex gap-2">
+          <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <Heart className='text-red-500 w-3 h-3' /> 心率
             </div>
-            <div className='w-[33%] bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <Gauge className='text-emerald-400 w-3 h-3' /> 速度
-              </div>
-              <div className='text-3xl font-bold'>{(stats.instantSpeed ?? 0).toFixed(1)}</div>
+            <div className='text-3xl font-bold'>{stats.heartRate ?? 0} <span className='text-zinc-600 text-xs'>BPM</span></div>
+          </div>
+          <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <Flame className='text-orange-500 w-3 h-3' /> 热量
             </div>
-            <div className='w-[33%] bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
-              <div className='flex items-center gap-1 text-zinc-500 text-[10px] uppercase mb-1'>
-                <MapPin className='text-pink-400 w-3 h-3' /> 距离
-              </div>
-              <div className='text-3xl font-bold'>{((stats.totalDistance ?? 0)/1000).toFixed(2)}</div>
+            <div className='text-3xl font-bold'>{(stats.kcal ?? 0).toFixed(0)} <span className='text-zinc-600 text-xs'>KCAL</span></div>
+          </div>
+        </div>
+
+        {/* 行3：踏频 + 速度 + 距离 */}
+        <div className="flex gap-2">
+          <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <RotateCcw className='text-blue-400 w-3 h-3' /> 踏频
             </div>
+            <div className='text-3xl font-bold'>{stats.instantCadence ?? 0} <span className='text-zinc-600 text-xs'>RPM</span></div>
+          </div>
+          <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <Gauge className='text-emerald-400 w-3 h-3' /> 速度
+            </div>
+            <div className='text-3xl font-bold'>{(stats.instantSpeed ?? 0).toFixed(1)}</div>
+          </div>
+          <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+            <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
+              <MapPin className='text-pink-400 w-3 h-3' /> 距离
+            </div>
+            <div className='text-3xl font-bold'>{((stats.totalDistance ?? 0)/1000).toFixed(2)}</div>
           </div>
         </div>
 
@@ -230,7 +244,7 @@ export default function App() {
         <div className="bg-zinc-900 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
-              <div className='text-zinc-500 text-[10px] uppercase'>阻力</div>
+              <div className='text-zinc-500 text-[10px]'>阻力</div>
               <div className="text-2xl font-bold text-amber-500">L{uiResistance}</div>
             </div>
             <div className='text-zinc-600 text-[10px]'>1-24</div>
@@ -244,13 +258,12 @@ export default function App() {
             <button onClick={() => updateResistance(uiResistance-1)} className='flex-1 h-10 bg-zinc-800 rounded-xl'><Minus size={16} /></button>
             <button onClick={() => updateResistance(uiResistance+1)} className='flex-1 h-10 bg-zinc-800 rounded-xl'><Plus size={16} /></button>
             {[1,12,24].map(l => (
-              <button key={l} onClick={() => updateResistance(l)} 
-                className='px-2 h-10 rounded-xl text-xs bg-zinc-800'>{l}</button>
+              <button key={l} onClick={() => updateResistance(l)} className='px-2 h-10 rounded-xl text-xs bg-zinc-800'>{l}</button>
             ))}
           </div>
         </div>
 
-        {/* 运动记录 */}
+        {/* 运动历史（完整预览所有字段） */}
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
@@ -264,14 +277,22 @@ export default function App() {
             </div>
           </div>
           <div className="max-h-28 overflow-y-auto space-y-1 mt-1">
-            {workoutHistory.length === 0 ? <div className='text-center text-zinc-500 text-xs py-1'>暂无记录</div> :
-              workoutHistory.slice(0,3).map(item => (
-                <div key={item.id} className='p-1 bg-zinc-800/50 rounded-xl text-[10px] flex justify-between'>
-                  <span>{item.date.slice(5,-3)}</span>
-                  <span>{item.duration} {item.kcal}kcal {item.distance}km L{item.resistance}</span>
+            {workoutHistory.length === 0 ? (
+              <div className='text-center text-zinc-500 text-xs py-1'>暂无记录</div>
+            ) : (
+              workoutHistory.map(item => (
+                <div key={item.id} className='p-2 bg-zinc-800/50 rounded-xl text-[10px] leading-relaxed'>
+                  <div className="flex justify-between text-zinc-400">
+                    <span>{item.date.slice(5,-3)}</span>
+                    <span>阻力 L{item.resistance}</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span>{item.duration} • {item.kcal}kcal • {item.distance}km</span>
+                    <span>均{item.avgHeartRate} • 峰{item.maxHeartRate} BPM</span>
+                  </div>
                 </div>
               ))
-            }
+            )}
           </div>
         </div>
       </main>
