@@ -43,10 +43,10 @@ export function useBluetooth() {
       const instantaneousPower = data.getUint16(offset, true); offset += 2;
       const elapsedTime = data.getUint16(offset, true); offset += 2;
       const kcal = data.getUint16(offset, true); offset += 2;
+      const heartRate = data.getUint8(offset); offset += 1;
 
-      // ✅ 只在这里处理心率：原作者的值如果是255就变0，**不新增读字节**
-      const rawHeartRate = stats.heartRate;
-      const fixedHeartRate = rawHeartRate === 255 ? 0 : rawHeartRate;
+      // ✅ 只修这一句：255 变 0
+      const fixedHr = heartRate === 255 ? 0 : heartRate;
 
       setStats({
         instantSpeed: instantaneousSpeed,
@@ -55,18 +55,17 @@ export function useBluetooth() {
         instantPower: instantaneousPower,
         elapsedTime: elapsedTime,
         kcal: kcal,
-        heartRate: fixedHeartRate
+        heartRate: fixedHr,
       });
     } catch (e) {
-      console.error('解析错误', e);
+      console.error('parse error', e);
     }
   };
 
-  // 以下全部是原作者原版逻辑，**一行不动**
   const connect = useCallback(async () => {
     try {
       setError('');
-      if (!navigator.bluetooth) throw new Error('浏览器不支持蓝牙');
+      if (!navigator.bluetooth) throw new Error('蓝牙不可用');
 
       const device = await navigator.bluetooth.requestDevice({
         filters: [{ services: [FTMS_SERVICE] }],
@@ -76,7 +75,7 @@ export function useBluetooth() {
       const server = await device.gatt!.connect();
       const service = await server.getPrimaryService(FTMS_SERVICE);
       const chr = await service.getCharacteristic(FTMS_CHARACTERISTIC);
-      
+
       await chr.startNotifications();
       chr.addEventListener('characteristicvaluechanged', (e) => {
         const v = (e.target as BluetoothRemoteGATTCharacteristic).value;
@@ -98,9 +97,9 @@ export function useBluetooth() {
 
   const setResistance = useCallback(async (level: number) => {
     try {
-      if (!controlPoint.current) throw new Error('未连接设备');
-      const clamped = Math.max(1, Math.min(24, level));
-      await controlPoint.current.writeValueWithResponse(new Uint8Array([0x04, 0x00, clamped]));
+      if (!controlPoint.current) throw new Error('未连接');
+      const v = Math.max(1, Math.min(24, level));
+      await controlPoint.current.writeValueWithResponse(new Uint8Array([0x04, 0x00, v]));
     } catch {}
   }, []);
 
