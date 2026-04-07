@@ -154,11 +154,10 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
-      {/* 顶部：MOBI 1.1 版本号 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-bold text-xl">MOBI 1.1</h1>
+          <h1 className="font-bold text-xl">MOBI 1.2</h1>
         </div>
         <div className="flex gap-1 flex-1 max-w-[170px]">
           <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
@@ -180,7 +179,6 @@ export default function App() {
       <main className="space-y-2">
         {error && <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-2 text-xs">{error}</div>}
 
-        {/* 行1：瞬时功率 + 时长 */}
         <div className="flex gap-2">
           <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -196,7 +194,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 行2：心率 + 热量 */}
         <div className="flex gap-2">
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -212,7 +209,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 行3：踏频 + 速度 + 距离 */}
         <div className="flex gap-2">
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -234,7 +230,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 阻力调节 */}
         <div className="bg-zinc-900 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
@@ -257,7 +252,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 历史记录 */}
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
