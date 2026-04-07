@@ -1,107 +1,124 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { BluetoothManager } from '../bluetooth/manager';
+import type { WorkoutData } from '../bluetooth/protocols/types';
 
-const FTMS_SERVICE = 0x1826;
-const FTMS_CHARACTERISTIC = 0x2ADA;
-const INDOOR_BIKE_CONTROL_POINT = 0x2AD9;
-
-export interface BikeStats {
-  instantPower: number;
-  instantCadence: number;
-  instantSpeed: number;
-  totalDistance: number;
-  elapsedTime: number;
-  kcal: number;
-  heartRate: number;
-}
-
-export function useBluetooth() {
+export const useBluetooth = () => {
   const [isConnected, setIsConnected] = useState(false);
-  const [stats, setStats] = useState<BikeStats>({
-    instantPower: 0,
-    instantCadence: 0,
+  const [error, setError] = useState<string | null>(null);
+  const [logs, setLogs] = useState<string[]>([]);
+
+  const managerRef = useRef<BluetoothManager>(new BluetoothManager());
+
+  // 记录上次收到有效运动数据的时间
+  const lastActivityTimeRef = useRef<number>(0);
+
+  const [stats, setStats] = useState<WorkoutData>({
     instantSpeed: 0,
+    instantCadence: 0,
+    instantPower: 0,
+    resistanceLevel: 10, // Default start
     totalDistance: 0,
-    elapsedTime: 0,
     kcal: 0,
     heartRate: 0,
+    elapsedTime: 0
   });
-  const [error, setError] = useState('');
-  const controlPoint = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
-  const deviceRef = useRef<BluetoothDevice | null>(null);
 
-  // ==============================
-  // 原作者原版解析，**完全不动**
-  // ==============================
-  const parseFTMSData = (data: DataView) => {
-    try {
-      const flags = data.getUint16(0, true);
-      let offset = 2;
+  const log = useCallback((msg: string) => {
+    console.log(msg);
+    setLogs(prev => [...prev.slice(-40), `${new Date().toLocaleTimeString()} - ${msg}`]);
+  }, []);
 
-      const instantaneousSpeed = data.getUint16(offset, true) / 100; offset += 2;
-      const instantaneousCadence = data.getUint16(offset, true) / 2; offset += 2;
-      const totalDistance = data.getUint32(offset, true); offset += 4;
-      const instantaneousPower = data.getUint16(offset, true); offset += 2;
-      const elapsedTime = data.getUint16(offset, true); offset += 2;
-      const kcal = data.getUint16(offset, true); offset += 2;
-      const heartRate = data.getUint8(offset); offset += 1;
+  // 注入 Logger 到 Manager
+  useEffect(() => {
+    managerRef.current.setLogger(log);
+  }, [log]);
 
-      // ✅ 只修这一句：255 变 0
-      const fixedHr = heartRate === 255 ? 0 : heartRate;
+  // 本地计时器逻辑
+  useEffect(() => {
+    if (!isConnected) return;
 
-      setStats({
-        instantSpeed: instantaneousSpeed,
-        instantCadence: instantaneousCadence,
-        totalDistance: totalDistance,
-        instantPower: instantaneousPower,
-        elapsedTime: elapsedTime,
-        kcal: kcal,
-        heartRate: fixedHr,
-      });
-    } catch (e) {
-      console.error('parse error', e);
-    }
-  };
+    const timer = setInterval(() => {
+      const now = Date.now();
+      // 如果 5 秒内有活动数据，则增加计时
+      // 参考官方 App 逻辑：有速度/踏频视为运动中，无数据超过一定时间(自动暂停时间)则暂停
+      if (now - lastActivityTimeRef.current < 5000) {
+        setStats(prev => ({
+          ...prev,
+          elapsedTime: (prev.elapsedTime || 0) + 1
+        }));
+      }
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, [isConnected]);
 
   const connect = useCallback(async () => {
     try {
-      setError('');
-      if (!navigator.bluetooth) throw new Error('蓝牙不可用');
+      setError(null);
+      log("Initializing Bluetooth Manager...");
 
-      const device = await navigator.bluetooth.requestDevice({
-        filters: [{ services: [FTMS_SERVICE] }],
+      const protocolName = await managerRef.current.connect();
+      log(`Connected using protocol: ${protocolName}`);
+
+      // 重置数据
+      setStats({
+        instantSpeed: 0,
+        instantCadence: 0,
+        instantPower: 0,
+        resistanceLevel: 10,
+        totalDistance: 0,
+        kcal: 0,
+        heartRate: 0,
+        elapsedTime: 0
       });
+      lastActivityTimeRef.current = 0; // 重置活动时间
 
-      deviceRef.current = device;
-      const server = await device.gatt!.connect();
-      const service = await server.getPrimaryService(FTMS_SERVICE);
-      const chr = await service.getCharacteristic(FTMS_CHARACTERISTIC);
-
-      await chr.startNotifications();
-      chr.addEventListener('characteristicvaluechanged', (e) => {
-        const v = (e.target as BluetoothRemoteGATTCharacteristic).value;
-        if (v) parseFTMSData(v);
-      });
-
-      controlPoint.current = await service.getCharacteristic(INDOOR_BIKE_CONTROL_POINT);
       setIsConnected(true);
-    } catch (err: any) {
-      setError(err.message);
+
+      await managerRef.current.startNotifications((data) => {
+        // 检测是否有运动
+        if ((data.instantSpeed && data.instantSpeed > 0) || (data.instantCadence && data.instantCadence > 0)) {
+          lastActivityTimeRef.current = Date.now();
+        }
+
+        // 过滤掉设备返回的时间，使用本地计时
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { elapsedTime, ...rest } = data;
+
+        setStats(prev => ({ ...prev, ...rest }));
+      });
+
+      log("Data stream started.");
+
+    } catch (err) {
+      console.error("Connection failed:", err);
+      let msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("User cancelled")) {
+        msg = "用户取消了连接";
+      } else if (msg === "2" || msg.includes("error 2") || (typeof err === "number" && err === 2)) {
+        msg = "连接失败 (Error 2): 请检查蓝牙是否开启，设备是否开机，或尝试重启 Bluefy 浏览器。";
+      }
+      setError(msg);
+      setIsConnected(false);
     }
   }, []);
 
   const disconnect = useCallback(() => {
-    deviceRef.current?.gatt?.disconnect();
+    managerRef.current.disconnect();
     setIsConnected(false);
-    controlPoint.current = null;
+    log("Disconnected.");
   }, []);
 
   const setResistance = useCallback(async (level: number) => {
     try {
-      if (!controlPoint.current) throw new Error('未连接');
-      const v = Math.max(1, Math.min(24, level));
-      await controlPoint.current.writeValueWithResponse(new Uint8Array([0x04, 0x00, v]));
-    } catch {}
+      await managerRef.current.setResistance(level);
+    } catch (e) {
+      console.error("Failed to set resistance:", e);
+    }
   }, []);
 
-  return { isConnected, stats, error, connect, disconnect, setResistance };
-}
+  // Monitor connection state via polling or events if manager supports it,
+  // but for now relying on state management here is fine.
+
+  return { isConnected, stats, error, connect, disconnect, setResistance, logs };
+};
