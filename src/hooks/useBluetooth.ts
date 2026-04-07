@@ -29,16 +29,12 @@ export function useBluetooth() {
   const controlPoint = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const deviceRef = useRef<BluetoothDevice | null>(null);
 
-  // ==============================================
-  // 🔥 原作者原版解析 100% 保留！无任何修改！
-  // 仅在最后 安全追加 心率读取，不破坏任何原有数据
-  // ==============================================
+  // 原作者原版解析，完全不动
   const parseFTMSData = (data: DataView) => {
     try {
       const flags = data.getUint16(0, true);
       let offset = 2;
 
-      // 原作者原始解析（完全不动，保证所有数据正常）
       const instantaneousSpeed = data.getUint16(offset, true) / 100; offset += 2;
       const instantaneousCadence = data.getUint16(offset, true) / 2; offset += 2;
       const totalDistance = data.getUint32(offset, true); offset += 4;
@@ -46,13 +42,10 @@ export function useBluetooth() {
       const elapsedTime = data.getUint16(offset, true); offset += 2;
       const kcal = data.getUint16(offset, true); offset += 2;
 
-      // ==========================================
-      // ✅ 安全追加：读取心率（不破坏原有协议）
-      // ==========================================
+      // 安全读取心率，不破坏协议
       const heartRateRaw = data.getUint8(offset);
       const heartRate = heartRateRaw === 255 ? 0 : heartRateRaw;
 
-      // 原作者赋值 + 心率（无任何破坏性修改）
       setStats({
         instantSpeed: instantaneousSpeed,
         instantCadence: instantaneousCadence,
@@ -67,9 +60,6 @@ export function useBluetooth() {
     }
   };
 
-  // ==============================================
-  // 原作者原版 连接/断开/阻力 代码 100% 完全不动
-  // ==============================================
   const connect = useCallback(async () => {
     try {
       setError('');
