@@ -35,8 +35,8 @@ export function useBluetooth() {
       const flags = data.getUint16(0, true);
       let offset = 2;
 
-      const instantaneousSpeed = data.getUint16(offset, true) / 100; offset += 2;
-      const instantaneousCadence = data.getUint16(offset, true) / 2; offset += 2;
+      const instantaneousSpeed = data.getUint16(offset, true)/100; offset += 2;
+      const instantaneousCadence = data.getUint16(offset, true)/2; offset += 2;
       const totalDistance = data.getUint32(offset, true); offset += 4;
       const instantaneousPower = data.getUint16(offset, true); offset += 2;
       const elapsedTime = data.getUint16(offset, true); offset += 2;
@@ -84,9 +84,7 @@ export function useBluetooth() {
   }, []);
 
   const disconnect = useCallback(() => {
-    if (deviceRef.current?.gatt) {
-      deviceRef.current.gatt.disconnect();
-    }
+    deviceRef.current?.gatt?.disconnect();
     setIsConnected(false);
     controlPoint.current = null;
   }, []);
