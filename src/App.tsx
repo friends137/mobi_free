@@ -45,18 +45,17 @@ export default function App() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 修复语法错误：补上 =>
   useEffect(() => { setWorkoutHistory(loadHistory()); }, []);
 
-  // 修复语法错误：补上 =>
   useEffect(() => {
     if (isConnected && stats.heartRate > 0) {
-      if (stats.heartRate > maxHeartRateRef.current) maxHeartRateRef.current = stats.heartRate;
-      if (isWorkoutActive) setValidHeartRates(prev => [...prev, stats.heartRate]);
+      if (stats.heartRate > maxHeartRateRef.current) 
+        maxHeartRateRef.current = stats.heartRate;
+      if (isWorkoutActive) 
+        setValidHeartRates(prev => [...prev, stats.heartRate]);
     }
   }, [stats.heartRate, isConnected, isWorkoutActive]);
 
-  // 修复语法错误：补上 =>
   useEffect(() => {
     if (isWorkoutActive) {
       timerRef.current = setInterval(() => setManualElapsedTime(p => p + 1), 1000);
@@ -92,7 +91,6 @@ export default function App() {
     setValidHeartRates([]);
   }, [manualElapsedTime, stats, workoutHistory, uiResistance, validHeartRates]);
 
-  // 修复语法错误：补上 =>
   useEffect(() => {
     if (!isConnected && isWorkoutActive) {
       setIsWorkoutActive(false);
@@ -156,10 +154,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
+      {/* 顶部：MOBI 1.1 版本号 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-bold text-xl">MOBI</h1>
+          <h1 className="font-bold text-xl">MOBI 1.1</h1>
         </div>
         <div className="flex gap-1 flex-1 max-w-[170px]">
           <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
@@ -258,7 +257,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 完整历史记录 */}
+        {/* 历史记录 */}
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
@@ -277,7 +276,7 @@ export default function App() {
             ) : (
               workoutHistory.map(item => (
                 <div key={item.id} className='p-2 bg-zinc-800/50 rounded-xl text-[10px] leading-relaxed'>
-                  <div className="flex justify-between text-zinc-40">
+                  <div className="flex justify-between text-zinc-400">
                     <span>{item.date.slice(5,-3)}</span>
                     <span>阻力 L{item.resistance}</span>
                   </div>
