@@ -29,14 +29,16 @@ export function useBluetooth() {
   const controlPoint = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const deviceRef = useRef<BluetoothDevice | null>(null);
 
-  // 原作者原版解析，一字未改
+  // ======================
+  // 原作者原版解析，完全不动
+  // ======================
   const parseFTMSData = (data: DataView) => {
     try {
       const flags = data.getUint16(0, true);
       let offset = 2;
 
-      const instantaneousSpeed = data.getUint16(offset, true)/100; offset += 2;
-      const instantaneousCadence = data.getUint16(offset, true)/2; offset += 2;
+      const instantaneousSpeed = data.getUint16(offset, true) / 100; offset += 2;
+      const instantaneousCadence = data.getUint16(offset, true) / 2; offset += 2;
       const totalDistance = data.getUint32(offset, true); offset += 4;
       const instantaneousPower = data.getUint16(offset, true); offset += 2;
       const elapsedTime = data.getUint16(offset, true); offset += 2;
@@ -49,7 +51,7 @@ export function useBluetooth() {
         instantPower: instantaneousPower,
         elapsedTime: elapsedTime,
         kcal: kcal,
-        heartRate: 0
+        heartRate: 0,
       });
     } catch (e) {
       console.error('parse error', e);
@@ -91,7 +93,7 @@ export function useBluetooth() {
 
   const setResistance = useCallback(async (level: number) => {
     try {
-      if (!controlPoint.current) throw new Error('未连接');
+      if (!controlPoint.current) return;
       const v = Math.max(1, Math.min(24, level));
       await controlPoint.current.writeValueWithResponse(new Uint8Array([0x04, 0x00, v]));
     } catch {}
