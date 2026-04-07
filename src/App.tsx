@@ -45,16 +45,19 @@ export default function App() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() { setWorkoutHistory(loadHistory()); }, []);
+  // 修复语法错误：补上 =>
+  useEffect(() => { setWorkoutHistory(loadHistory()); }, []);
 
-  useEffect(() {
+  // 修复语法错误：补上 =>
+  useEffect(() => {
     if (isConnected && stats.heartRate > 0) {
       if (stats.heartRate > maxHeartRateRef.current) maxHeartRateRef.current = stats.heartRate;
       if (isWorkoutActive) setValidHeartRates(prev => [...prev, stats.heartRate]);
     }
   }, [stats.heartRate, isConnected, isWorkoutActive]);
 
-  useEffect(() {
+  // 修复语法错误：补上 =>
+  useEffect(() => {
     if (isWorkoutActive) {
       timerRef.current = setInterval(() => setManualElapsedTime(p => p + 1), 1000);
     } else {
@@ -89,7 +92,8 @@ export default function App() {
     setValidHeartRates([]);
   }, [manualElapsedTime, stats, workoutHistory, uiResistance, validHeartRates]);
 
-  useEffect(() {
+  // 修复语法错误：补上 =>
+  useEffect(() => {
     if (!isConnected && isWorkoutActive) {
       setIsWorkoutActive(false);
       saveWorkoutRecord();
@@ -130,13 +134,13 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   };
 
-  const handleImport = (e) => {
+  const handleImport = (e: any) => {
     const f = e.target.files?.[0];
     if (!f) return;
     const r = new FileReader();
     r.onload = (ev) => {
       try {
-        const arr = JSON.parse(ev.target?.result);
+        const arr = JSON.parse(ev.target?.result as string);
         if (Array.isArray(arr) && confirm(`导入 ${arr.length} 条记录？`)) {
           setWorkoutHistory([...arr, ...workoutHistory]);
           saveHistory([...arr, ...workoutHistory]);
@@ -177,6 +181,7 @@ export default function App() {
       <main className="space-y-2">
         {error && <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-2 text-xs">{error}</div>}
 
+        {/* 行1：瞬时功率 + 时长 */}
         <div className="flex gap-2">
           <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -192,6 +197,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* 行2：心率 + 热量 */}
         <div className="flex gap-2">
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -207,6 +213,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* 行3：踏频 + 速度 + 距离 */}
         <div className="flex gap-2">
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -228,6 +235,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* 阻力调节 */}
         <div className="bg-zinc-900 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
@@ -250,6 +258,7 @@ export default function App() {
           </div>
         </div>
 
+        {/* 完整历史记录 */}
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
@@ -268,13 +277,13 @@ export default function App() {
             ) : (
               workoutHistory.map(item => (
                 <div key={item.id} className='p-2 bg-zinc-800/50 rounded-xl text-[10px] leading-relaxed'>
-                  <div className="flex justify-between text-zinc-400">
+                  <div className="flex justify-between text-zinc-40">
                     <span>{item.date.slice(5,-3)}</span>
                     <span>阻力 L{item.resistance}</span>
                   </div>
                   <div className="flex justify-between mt-1">
                     <span>{item.duration} • {item.kcal}kcal • {item.distance}km</span>
-                    <span>均{item.avgHeartRate} • 峰{item.maxHeartRate} BPM</span>
+                    <span>平均{item.avgHeartRate} • 峰值{item.maxHeartRate} BPM</span>
                   </div>
                 </div>
               ))
