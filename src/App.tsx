@@ -157,7 +157,7 @@ export default function App() {
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-bold text-xl">MOBI 1.2</h1>
+          <h1 className="font-bold text-xl">MOBI 1.3</h1>
         </div>
         <div className="flex gap-1 flex-1 max-w-[170px]">
           <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
