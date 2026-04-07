@@ -26,10 +26,10 @@ const formatTime = (seconds: number) => {
 
 const STORAGE_KEY = 'MOBI_WORKOUT_HISTORY';
 const saveHistory = (data: WorkoutRecord[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-const loadHistory = (): WorkoutRecord[] => {
+const loadHistory(): WorkoutRecord[] {
   const d = localStorage.getItem(STORAGE_KEY);
   return d ? JSON.parse(d) : [];
-};
+}
 
 export default function App() {
   const { isConnected, stats, error, connect, disconnect, setResistance } = useBluetooth();
@@ -49,10 +49,8 @@ export default function App() {
 
   useEffect(() => {
     if (isConnected && stats.heartRate > 0) {
-      if (stats.heartRate > maxHeartRateRef.current) 
-        maxHeartRateRef.current = stats.heartRate;
-      if (isWorkoutActive) 
-        setValidHeartRates(prev => [...prev, stats.heartRate]);
+      if (stats.heartRate > maxHeartRateRef.current) maxHeartRateRef.current = stats.heartRate;
+      if (isWorkoutActive) setValidHeartRates(prev => [...prev, stats.heartRate]);
     }
   }, [stats.heartRate, isConnected, isWorkoutActive]);
 
@@ -154,10 +152,11 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
+      {/* 版本号升级为 MOBI 1.4 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-bold text-xl">MOBI 1.3</h1>
+          <h1 className="font-bold text-xl">MOBI 1.4</h1>
         </div>
         <div className="flex gap-1 flex-1 max-w-[170px]">
           <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
