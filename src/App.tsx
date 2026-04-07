@@ -19,14 +19,13 @@ interface WorkoutRecord {
 }
 
 const formatTime = (seconds: number) => {
-  const m = Math.floor(seconds / 6);
-  const s = seconds % 6;
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
 const STORAGE_KEY = 'MOBI_WORKOUT_HISTORY';
 const saveHistory = (data: WorkoutRecord[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-// 🔥 修复编译报错的核心代码
 const loadHistory = (): WorkoutRecord[] => {
   const d = localStorage.getItem(STORAGE_KEY);
   return d ? JSON.parse(d) : [];
@@ -39,37 +38,15 @@ export default function App() {
   const [uiResistance, setUiResistance] = useState(10);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutRecord[]>([]);
   const maxHeartRateRef = useRef<number>(0);
-  const [validHeartRates, setValidHeartRates] = useState<number[]>([]);
-  
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
-  const [manualElapsedTime, setManualElapsedTime] = useState(0);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => { setWorkoutHistory(loadHistory()); }, []);
 
   useEffect(() => {
-    if (isConnected && stats.heartRate > 0) {
-      if (stats.heartRate > maxHeartRateRef.current) maxHeartRateRef.current = stats.heartRate;
-      if (isWorkoutActive) setValidHeartRates(prev => [...prev, stats.heartRate]);
-    }
-  }, [stats.heartRate, isConnected, isWorkoutActive]);
-
-  useEffect(() => {
-    if (isWorkoutActive) {
-      timerRef.current = setInterval(() => setManualElapsedTime(p => p + 1), 1000);
-    } else {
-      if (timerRef.current) clearInterval(timerRef.current);
-    }
-    return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [isWorkoutActive]);
+    setWorkoutHistory(loadHistory());
+  }, []);
 
   const saveWorkoutRecord = useCallback(() => {
-    const durationSec = manualElapsedTime > 10 ? manualElapsedTime : (stats.elapsedTime || 0);
+    const durationSec = stats.elapsedTime || 0;
     if (durationSec < 10) return;
-
-    const valid = validHeartRates.filter(h => h > 0);
-    const avgHR = valid.length ? Math.round(valid.reduce((a,b)=>a+b,0)/valid.length) : 0;
 
     const record: WorkoutRecord = {
       id: Date.now().toString(),
@@ -77,7 +54,7 @@ export default function App() {
       duration: formatTime(durationSec),
       kcal: Math.round(stats.kcal || 0),
       distance: ((stats.totalDistance || 0) / 1000).toFixed(2),
-      avgHeartRate: avgHR,
+      avgHeartRate: stats.heartRate,
       maxHeartRate: maxHeartRateRef.current,
       resistance: uiResistance,
     };
@@ -87,27 +64,27 @@ export default function App() {
     saveHistory(newHistory);
     
     maxHeartRateRef.current = 0;
-    setValidHeartRates([]);
-  }, [manualElapsedTime, stats, workoutHistory, uiResistance, validHeartRates]);
+  }, [stats, workoutHistory, uiResistance]);
 
   useEffect(() => {
     if (!isConnected && isWorkoutActive) {
       setIsWorkoutActive(false);
       saveWorkoutRecord();
     }
-  }, [isConnected]);
+  }, [isConnected, isWorkoutActive, saveWorkoutRecord]);
 
   const updateResistance = useCallback(async (level: number) => {
-    const v = Math.min(Math.max(level,1),24);
-    try { setUiResistance(v); await setResistance(v); } catch {}
+    const v = Math.min(Math.max(level, 1), 24);
+    try {
+      setUiResistance(v);
+      await setResistance(v);
+    } catch {}
   }, [setResistance]);
 
   const handleStart = () => {
     if (!isConnected) { alert('请先连接椭圆机'); return; }
-    setManualElapsedTime(0);
     setIsWorkoutActive(true);
     maxHeartRateRef.current = 0;
-    setValidHeartRates([]);
   };
 
   const handleStop = () => {
@@ -116,7 +93,7 @@ export default function App() {
   };
 
   const clearHistory = () => {
-    if (confirm('确定清空记录？')) {
+    if (confirm('确定清空所有记录？')) {
       setWorkoutHistory([]);
       saveHistory([]);
     }
@@ -125,13 +102,13 @@ export default function App() {
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(workoutHistory, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.download = `mobi-${new Date().toISOString().slice(0,10)}.json`;
+    a.download = `mobi-${new Date().toISOString().slice(0, 10)}.json`;
     a.href = URL.createObjectURL(blob);
     a.click();
     URL.revokeObjectURL(a.href);
   };
 
-  const handleImport = (e: any) => {
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     const r = new FileReader();
@@ -149,14 +126,12 @@ export default function App() {
     e.target.value = '';
   };
 
-  const displayTime = isWorkoutActive ? manualElapsedTime : (stats.elapsedTime || 0);
-
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-bold text-xl">MOBI 1.4</h1>
+          <h1 className="font-bold text-xl">MOBI 1.6</h1>
         </div>
         <div className="flex gap-1 flex-1 max-w-[170px]">
           <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
@@ -181,28 +156,28 @@ export default function App() {
         <div className="flex gap-2">
           <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Zap className='text-amber-500 w-5 h-3' /> 瞬时功率
+              <Zap className='text-amber-500 w-3 h-3' /> 瞬时功率
             </div>
             <div className='text-3xl font-bold'>{stats.instantPower ?? 0} <span className='text-zinc-600 text-xs'>W</span></div>
           </div>
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Timer className='text-purple-400 w-5 h-3' /> 时长
+              <Timer className='text-purple-400 w-3 h-3' /> 时长
             </div>
-            <div className='text-3xl font-bold'>{formatTime(displayTime)}</div>
+            <div className='text-3xl font-bold'>{formatTime(stats.elapsedTime)}</div>
           </div>
         </div>
 
         <div className="flex gap-2">
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Heart className='text-red-500 w-5 h-3' /> 心率
+              <Heart className='text-red-500 w-3 h-3' /> 心率
             </div>
             <div className='text-3xl font-bold'>{stats.heartRate ?? 0} <span className='text-zinc-600 text-xs'>BPM</span></div>
           </div>
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Flame className='text-orange-500 w-5 h-3' /> 热量
+              <Flame className='text-orange-500 w-3 h-3' /> 热量
             </div>
             <div className='text-3xl font-bold'>{(stats.kcal ?? 0).toFixed(0)} <span className='text-zinc-600 text-xs'>KCAL</span></div>
           </div>
@@ -211,19 +186,19 @@ export default function App() {
         <div className="flex gap-2">
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <RotateCcw className='text-blue-400 w-5 h-3' /> 踏频
+              <RotateCcw className='text-blue-400 w-3 h-3' /> 踏频
             </div>
             <div className='text-3xl font-bold'>{stats.instantCadence ?? 0} <span className='text-zinc-600 text-xs'>RPM</span></div>
           </div>
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Gauge className='text-emerald-400 w-5 h-3' /> 速度
+              <Gauge className='text-emerald-400 w-3 h-3' /> 速度
             </div>
             <div className='text-3xl font-bold'>{(stats.instantSpeed ?? 0).toFixed(1)}</div>
           </div>
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <MapPin className='text-pink-400 w-5 h-3' /> 距离
+              <MapPin className='text-pink-400 w-3 h-3' /> 距离
             </div>
             <div className='text-3xl font-bold'>{((stats.totalDistance ?? 0)/1000).toFixed(2)}</div>
           </div>
@@ -254,13 +229,13 @@ export default function App() {
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
-              <History className='text-blue-400 w-5 h-3' /> 运动记录
+              <History className='text-blue-400 w-4 h-4' /> 运动记录
             </div>
             <div className="flex gap-1">
               <button onClick={handleExport} className='text-green-400 text-xs'><Download size={12} />导出</button>
-              <button onClick={() => fileInputRef.current?.click()} className='text-cyan-400 text-xs'><Upload size={12} />导入</button>
+              <button onClick={() => document.getElementById('file-input')?.click()} className='text-cyan-400 text-xs'><Upload size={12} />导入</button>
               <button onClick={clearHistory} className='text-rose-500'><Trash2 size={12} /></button>
-              <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
+              <input id="file-input" type="file" accept=".json" onChange={handleImport} className="hidden" />
             </div>
           </div>
           <div className="max-h-28 overflow-y-auto space-y-1 mt-1">
@@ -275,7 +250,7 @@ export default function App() {
                   </div>
                   <div className="flex justify-between mt-1">
                     <span>{item.duration} • {item.kcal}kcal • {item.distance}km</span>
-                    <span>平均{item.avgHeartRate} • 峰值{item.maxHeartRate} BPM</span>
+                    <span>平均{item.avgHeartRate} • 峰{item.maxHeartRate} BPM</span>
                   </div>
                 </div>
               ))
