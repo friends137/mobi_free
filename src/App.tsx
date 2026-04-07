@@ -19,17 +19,18 @@ interface WorkoutRecord {
 }
 
 const formatTime = (seconds: number) => {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+  const m = Math.floor(seconds / 6);
+  const s = seconds % 6;
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 };
 
 const STORAGE_KEY = 'MOBI_WORKOUT_HISTORY';
 const saveHistory = (data: WorkoutRecord[]) => localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-const loadHistory(): WorkoutRecord[] {
+// 🔥 修复编译报错的核心代码
+const loadHistory = (): WorkoutRecord[] => {
   const d = localStorage.getItem(STORAGE_KEY);
   return d ? JSON.parse(d) : [];
-}
+};
 
 export default function App() {
   const { isConnected, stats, error, connect, disconnect, setResistance } = useBluetooth();
@@ -115,7 +116,7 @@ export default function App() {
   };
 
   const clearHistory = () => {
-    if (confirm('确定清空所有记录？')) {
+    if (confirm('确定清空记录？')) {
       setWorkoutHistory([]);
       saveHistory([]);
     }
@@ -152,7 +153,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
-      {/* 版本号升级为 MOBI 1.4 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
@@ -181,13 +181,13 @@ export default function App() {
         <div className="flex gap-2">
           <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Zap className='text-amber-500 w-3 h-3' /> 瞬时功率
+              <Zap className='text-amber-500 w-5 h-3' /> 瞬时功率
             </div>
             <div className='text-3xl font-bold'>{stats.instantPower ?? 0} <span className='text-zinc-600 text-xs'>W</span></div>
           </div>
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Timer className='text-purple-400 w-3 h-3' /> 时长
+              <Timer className='text-purple-400 w-5 h-3' /> 时长
             </div>
             <div className='text-3xl font-bold'>{formatTime(displayTime)}</div>
           </div>
@@ -196,13 +196,13 @@ export default function App() {
         <div className="flex gap-2">
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Heart className='text-red-500 w-3 h-3' /> 心率
+              <Heart className='text-red-500 w-5 h-3' /> 心率
             </div>
             <div className='text-3xl font-bold'>{stats.heartRate ?? 0} <span className='text-zinc-600 text-xs'>BPM</span></div>
           </div>
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Flame className='text-orange-500 w-3 h-3' /> 热量
+              <Flame className='text-orange-500 w-5 h-3' /> 热量
             </div>
             <div className='text-3xl font-bold'>{(stats.kcal ?? 0).toFixed(0)} <span className='text-zinc-600 text-xs'>KCAL</span></div>
           </div>
@@ -211,19 +211,19 @@ export default function App() {
         <div className="flex gap-2">
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <RotateCcw className='text-blue-400 w-3 h-3' /> 踏频
+              <RotateCcw className='text-blue-400 w-5 h-3' /> 踏频
             </div>
             <div className='text-3xl font-bold'>{stats.instantCadence ?? 0} <span className='text-zinc-600 text-xs'>RPM</span></div>
           </div>
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <Gauge className='text-emerald-400 w-3 h-3' /> 速度
+              <Gauge className='text-emerald-400 w-5 h-3' /> 速度
             </div>
             <div className='text-3xl font-bold'>{(stats.instantSpeed ?? 0).toFixed(1)}</div>
           </div>
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
-              <MapPin className='text-pink-400 w-3 h-3' /> 距离
+              <MapPin className='text-pink-400 w-5 h-3' /> 距离
             </div>
             <div className='text-3xl font-bold'>{((stats.totalDistance ?? 0)/1000).toFixed(2)}</div>
           </div>
@@ -254,7 +254,7 @@ export default function App() {
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
-              <History className='text-blue-400 w-4 h-4' /> 运动记录
+              <History className='text-blue-400 w-5 h-3' /> 运动记录
             </div>
             <div className="flex gap-1">
               <button onClick={handleExport} className='text-green-400 text-xs'><Download size={12} />导出</button>
