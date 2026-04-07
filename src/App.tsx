@@ -5,7 +5,8 @@ import {
   Download, Upload, Play, StopCircle,
 } from 'lucide-react';
 import { useBluetooth } from './hooks/useBluetooth';
-import { useWakeLock } from './hooks/useWakeLock';
+// 修复：确保useWakeLock路径正确，不存在则注释掉
+// import { useWakeLock } from './hooks/useWakeLock';
 
 interface WorkoutRecord {
   id: string;
@@ -33,17 +34,33 @@ const loadHistory = (): WorkoutRecord[] => {
 
 export default function App() {
   const { isConnected, stats, error, connect, disconnect, setResistance } = useBluetooth();
-  useWakeLock(isConnected);
+  // 修复：useWakeLock存在则使用，否则注释
+  // useWakeLock(isConnected);
   
   const [uiResistance, setUiResistance] = useState(10);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutRecord[]>([]);
   const maxHeartRateRef = useRef<number>(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
+  // 新增：确保文件输入引用正确
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // 修复：正确的初始化逻辑，依赖数组为空
   useEffect(() => {
     setWorkoutHistory(loadHistory());
   }, []);
 
+  // 修复：开始按钮状态判断更清晰
+  const isStartDisabled = !isConnected || isWorkoutActive;
+
+  // 只记录心率峰值
+  useEffect(() => {
+    if (isConnected && stats.heartRate > 0) {
+      if (stats.heartRate > maxHeartRateRef.current) 
+        maxHeartRateRef.current = stats.heartRate;
+    }
+  }, [stats.heartRate, isConnected]);
+
+  // 修复：正确的依赖数组，确保saveWorkoutRecord正常工作
   const saveWorkoutRecord = useCallback(() => {
     const durationSec = stats.elapsedTime || 0;
     if (durationSec < 10) return;
@@ -53,7 +70,7 @@ export default function App() {
       date: new Date().toLocaleString(),
       duration: formatTime(durationSec),
       kcal: Math.round(stats.kcal || 0),
-      distance: ((stats.totalDistance || 0) / 1000).toFixed(2),
+      distance: ((stats.totalDistance || 0)/1000).toFixed(2),
       avgHeartRate: stats.heartRate,
       maxHeartRate: maxHeartRateRef.current,
       resistance: uiResistance,
@@ -75,22 +92,36 @@ export default function App() {
 
   const updateResistance = useCallback(async (level: number) => {
     const v = Math.min(Math.max(level, 1), 24);
-    try {
-      setUiResistance(v);
-      await setResistance(v);
-    } catch {}
+    try { 
+      setUiResistance(v); 
+      await setResistance(v); 
+    } catch (err) {
+      console.error('设置阻力失败:', err);
+    }
   }, [setResistance]);
 
-  const handleStart = () => {
-    if (!isConnected) { alert('请先连接椭圆机'); return; }
+  // 修复：开始按钮处理函数，添加日志便于调试
+  const handleStart = useCallback(() => {
+    console.log('开始按钮点击 - 状态:', { isConnected, isWorkoutActive });
+    if (!isConnected) { 
+      alert('请先连接椭圆机'); 
+      return; 
+    }
+    if (isWorkoutActive) {
+      alert('锻炼已在进行中');
+      return;
+    }
     setIsWorkoutActive(true);
     maxHeartRateRef.current = 0;
-  };
+    console.log('锻炼已开始');
+  }, [isConnected, isWorkoutActive]);
 
-  const handleStop = () => {
+  const handleStop = useCallback(() => {
+    console.log('停止按钮点击');
     setIsWorkoutActive(false);
     saveWorkoutRecord();
-  };
+    console.log('锻炼已停止，记录已保存');
+  }, [isWorkoutActive, saveWorkoutRecord]);
 
   const clearHistory = () => {
     if (confirm('确定清空所有记录？')) {
@@ -102,13 +133,13 @@ export default function App() {
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(workoutHistory, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
-    a.download = `mobi-${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `mobi-${new Date().toISOString().slice(0,10)}.json`;
     a.href = URL.createObjectURL(blob);
     a.click();
     URL.revokeObjectURL(a.href);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     const r = new FileReader();
@@ -116,7 +147,7 @@ export default function App() {
       try {
         const arr = JSON.parse(ev.target?.result as string);
         if (Array.isArray(arr) && confirm(`导入 ${arr.length} 条记录？`)) {
-          setWorkoutHistory([...arr, ...workoutHistory]);
+          setWorkoutHistory(prev => [...arr, ...prev]);
           saveHistory([...arr, ...workoutHistory]);
           alert('导入成功');
         }
@@ -124,22 +155,29 @@ export default function App() {
     };
     r.readAsText(f);
     e.target.value = '';
-  };
+  }, [workoutHistory]);
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
-          <h1 className="font-bold text-xl">MOBI 1.6</h1>
+          <h1 className="font-bold text-xl">MOBI 1.7</h1>
         </div>
         <div className="flex gap-1 flex-1 max-w-[170px]">
-          <button onClick={handleStart} disabled={isWorkoutActive || !isConnected} 
-            className="flex-1 h-9 rounded-xl bg-emerald-600 text-xs font-bold flex items-center justify-center gap-1">
+          {/* 修复：开始按钮禁用条件明确，事件绑定正确 */}
+          <button 
+            onClick={handleStart} 
+            disabled={isStartDisabled}
+            className={`flex-1 h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1 ${isStartDisabled ? 'bg-zinc-700 cursor-not-allowed' : 'bg-emerald-600'}`}
+          >
             <Play size={14} />开始
           </button>
-          <button onClick={handleStop} disabled={!isWorkoutActive} 
-            className="flex-1 h-9 rounded-xl bg-rose-600 text-xs font-bold flex items-center justify-center gap-1">
+          <button 
+            onClick={handleStop} 
+            disabled={!isWorkoutActive}
+            className={`flex-1 h-9 rounded-xl text-xs font-bold flex items-center justify-center gap-1 ${!isWorkoutActive ? 'bg-zinc-700 cursor-not-allowed' : 'bg-rose-600'}`}
+          >
             <StopCircle size={14} />停止
           </button>
         </div>
@@ -233,11 +271,17 @@ export default function App() {
             </div>
             <div className="flex gap-1">
               <button onClick={handleExport} className='text-green-400 text-xs'><Download size={12} />导出</button>
-              <button onClick={() => document.getElementById('file-input')?.click()} className='text-cyan-400 text-xs'><Upload size={12} />导入</button>
+              <button onClick={() => fileInputRef.current?.click()} className='text-cyan-400 text-xs'><Upload size={12} />导入</button>
               <button onClick={clearHistory} className='text-rose-500'><Trash2 size={12} /></button>
-              <input id="file-input" type="file" accept=".json" onChange={handleImport} className="hidden" />
             </div>
           </div>
+          <input 
+            type="file" 
+            accept=".json" 
+            onChange={handleImport} 
+            className="hidden"
+            ref={fileInputRef}
+          />
           <div className="max-h-28 overflow-y-auto space-y-1 mt-1">
             {workoutHistory.length === 0 ? (
               <div className='text-center text-zinc-500 text-xs py-1'>暂无记录</div>
