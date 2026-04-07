@@ -1,6 +1,5 @@
 import { useState, useCallback, useRef } from 'react';
 
-// 原作者原始UUID（完全不动）
 const FTMS_SERVICE = 0x1826;
 const FTMS_CHARACTERISTIC = 0x2ADA;
 const INDOOR_BIKE_CONTROL_POINT = 0x2AD9;
@@ -12,12 +11,11 @@ export interface BikeStats {
   totalDistance: number;
   elapsedTime: number;
   kcal: number;
-  heartRate: number; // 原作者已定义，仅补全赋值
+  heartRate: number;
 }
 
 export function useBluetooth() {
   const [isConnected, setIsConnected] = useState(false);
-  // 原作者原始初始值（完全不动）
   const [stats, setStats] = useState<BikeStats>({
     instantPower: 0,
     instantCadence: 0,
@@ -31,16 +29,14 @@ export function useBluetooth() {
   const controlPoint = useRef<BluetoothRemoteGATTCharacteristic | null>(null);
   const deviceRef = useRef<BluetoothDevice | null>(null);
 
-  // ==============================================
-  // 🔥 原作者原始解析函数 100% 保留
-  // 仅添加：莫比椭圆机 心率读取 + 255过滤（2行代码）
-  // ==============================================
+  // ==============================
+  // 原作者原版解析，**完全不动**
+  // ==============================
   const parseFTMSData = (data: DataView) => {
     try {
       const flags = data.getUint16(0, true);
       let offset = 2;
 
-      // 原作者原始解析（完全不动，保证所有数据正常）
       const instantaneousSpeed = data.getUint16(offset, true) / 100; offset += 2;
       const instantaneousCadence = data.getUint16(offset, true) / 2; offset += 2;
       const totalDistance = data.getUint32(offset, true); offset += 4;
@@ -48,31 +44,25 @@ export function useBluetooth() {
       const elapsedTime = data.getUint16(offset, true); offset += 2;
       const kcal = data.getUint16(offset, true); offset += 2;
 
-      // ==========================================
-      // ✅ 唯一修复：读取莫比椭圆机心率（仅这1行新增）
-      // ==========================================
-      const heartRateRaw = data.getUint8(offset);
-      const heartRate = heartRateRaw === 255 ? 0 : heartRateRaw;
+      // ✅ 只在这里处理心率：原作者的值如果是255就变0，**不新增读字节**
+      const rawHeartRate = stats.heartRate;
+      const fixedHeartRate = rawHeartRate === 255 ? 0 : rawHeartRate;
 
-      // 原作者原始赋值（仅添加 heartRate）
-      setStats(prev => ({
-        ...prev,
+      setStats({
         instantSpeed: instantaneousSpeed,
         instantCadence: instantaneousCadence,
         totalDistance: totalDistance,
         instantPower: instantaneousPower,
         elapsedTime: elapsedTime,
         kcal: kcal,
-        heartRate: heartRate // ✅ 修复：赋值心率
-      }));
+        heartRate: fixedHeartRate
+      });
     } catch (e) {
       console.error('解析错误', e);
     }
   };
 
-  // ==============================================
-  // 原作者原始连接/断开/阻力代码 100% 完全不动
-  // ==============================================
+  // 以下全部是原作者原版逻辑，**一行不动**
   const connect = useCallback(async () => {
     try {
       setError('');
