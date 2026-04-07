@@ -45,22 +45,16 @@ export default function App() {
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => { setWorkoutHistory(loadHistory()); }, []);
+  useEffect(() { setWorkoutHistory(loadHistory()); }, []);
 
-  // 记录最大心率 & 收集有效心率
-  useEffect(() => {
+  useEffect(() {
     if (isConnected && stats.heartRate > 0) {
-      if (stats.heartRate > maxHeartRateRef.current) {
-        maxHeartRateRef.current = stats.heartRate;
-      }
-      if (isWorkoutActive) {
-        setValidHeartRates(prev => [...prev, stats.heartRate]);
-      }
+      if (stats.heartRate > maxHeartRateRef.current) maxHeartRateRef.current = stats.heartRate;
+      if (isWorkoutActive) setValidHeartRates(prev => [...prev, stats.heartRate]);
     }
   }, [stats.heartRate, isConnected, isWorkoutActive]);
 
-  // 手动计时
-  useEffect(() => {
+  useEffect(() {
     if (isWorkoutActive) {
       timerRef.current = setInterval(() => setManualElapsedTime(p => p + 1), 1000);
     } else {
@@ -69,12 +63,11 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isWorkoutActive]);
 
-  // 停止时保存记录（真实平均心率）
   const saveWorkoutRecord = useCallback(() => {
     const durationSec = manualElapsedTime > 10 ? manualElapsedTime : (stats.elapsedTime || 0);
     if (durationSec < 10) return;
 
-    const valid = validHeartRates.filter(h => h > 0 && h < 250);
+    const valid = validHeartRates.filter(h => h > 0);
     const avgHR = valid.length ? Math.round(valid.reduce((a,b)=>a+b,0)/valid.length) : 0;
 
     const record: WorkoutRecord = {
@@ -96,8 +89,7 @@ export default function App() {
     setValidHeartRates([]);
   }, [manualElapsedTime, stats, workoutHistory, uiResistance, validHeartRates]);
 
-  // 蓝牙断开自动保存
-  useEffect(() => {
+  useEffect(() {
     if (!isConnected && isWorkoutActive) {
       setIsWorkoutActive(false);
       saveWorkoutRecord();
@@ -138,13 +130,13 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImport = (e) => {
     const f = e.target.files?.[0];
     if (!f) return;
     const r = new FileReader();
     r.onload = (ev) => {
       try {
-        const arr = JSON.parse(ev.target?.result as string);
+        const arr = JSON.parse(ev.target?.result);
         if (Array.isArray(arr) && confirm(`导入 ${arr.length} 条记录？`)) {
           setWorkoutHistory([...arr, ...workoutHistory]);
           saveHistory([...arr, ...workoutHistory]);
@@ -160,7 +152,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
-      {/* 顶部：MOBI + 开始/停止 + 连接 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg"><Activity className="text-black w-5 h-5" /></div>
@@ -186,7 +177,6 @@ export default function App() {
       <main className="space-y-2">
         {error && <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-2 text-xs">{error}</div>}
 
-        {/* 行1：瞬时功率 + 时长 */}
         <div className="flex gap-2">
           <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -202,7 +192,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 行2：心率（瞬时） + 热量 */}
         <div className="flex gap-2">
           <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -218,7 +207,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 行3：踏频 + 速度 + 距离 */}
         <div className="flex gap-2">
           <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
@@ -240,7 +228,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 阻力调节 */}
         <div className="bg-zinc-900 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
@@ -263,7 +250,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* 运动历史（完整预览所有字段） */}
         <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
             <div className='flex items-center gap-1 text-sm font-bold'>
