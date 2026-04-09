@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Activity, Zap, Gauge, Bluetooth, BluetoothOff, RotateCcw,
   Plus, Minus, Timer, Flame, MapPin, Heart, History, Trash2,
-  Download, Upload, Play, StopCircle,
+  Download, Upload, Play, StopCircle, Bug
 } from 'lucide-react';
 import { useBluetooth } from './hooks/useBluetooth';
 
@@ -31,13 +31,24 @@ const loadHistory = (): WorkoutRecord[] => {
 };
 
 export default function App() {
-  const { isConnected, stats, error, connect, disconnect, setResistance } = useBluetooth();
+  const { 
+    isConnected, 
+    stats, 
+    error, 
+    protocol, 
+    deviceName, 
+    rawPacket,
+    connect, 
+    disconnect, 
+    setResistance 
+  } = useBluetooth();
 
   const [uiResistance, setUiResistance] = useState(10);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutRecord[]>([]);
   const maxHeartRateRef = useRef(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [manualElapsedTime, setManualElapsedTime] = useState(0);
+  const [showDebug, setShowDebug] = useState(false); // 调试面板开关
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -164,7 +175,7 @@ export default function App() {
           <div className="bg-amber-500 p-1.5 rounded-lg">
             <Activity className="text-black w-5 h-5" />
           </div>
-          <h1 className="font-bold text-xl">MOBI 1.9</h1>
+          <h1 className="font-bold text-xl">MOBI 2.0</h1>
         </div>
 
         <div className="flex gap-1 flex-1 max-w-[170px]">
@@ -198,6 +209,27 @@ export default function App() {
         {error && (
           <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-2 text-xs">
             {error}
+          </div>
+        )}
+
+        {/* 调试面板开关 */}
+        <div className="flex justify-end">
+          <button 
+            onClick={() => setShowDebug(!showDebug)}
+            className="flex items-center gap-1 text-xs text-cyan-400"
+          >
+            <Bug size={12} /> {showDebug ? '隐藏调试' : '显示调试'}
+          </button>
+        </div>
+
+        {/* 调试面板 */}
+        {showDebug && (
+          <div className="bg-zinc-900 rounded-2xl p-3 border border-cyan-500/30 text-xs font-mono">
+            <div className="mb-1">设备名: {deviceName}</div>
+            <div className="mb-1">当前协议: {protocol}</div>
+            <div className="mb-1">心率原始值: {stats.heartRateRaw}</div>
+            <div className="mb-1">原始数据包: [{rawPacket.join(', ')}]</div>
+            <div className="text-cyan-400">请打开浏览器F12控制台查看完整日志</div>
           </div>
         )}
 
