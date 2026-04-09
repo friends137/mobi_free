@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect, useRef } from 'react';
 import {
   Activity, Zap, Gauge, Bluetooth, BluetoothOff, RotateCcw,
   Plus, Minus, Timer, Flame, MapPin, Heart, History, Trash2,
-  Download, Upload, Play, StopCircle, Bug
+  Download, Upload, Play, StopCircle,
 } from 'lucide-react';
 import { useBluetooth } from './hooks/useBluetooth';
 
@@ -35,9 +35,6 @@ export default function App() {
     isConnected, 
     stats, 
     error, 
-    protocol, 
-    deviceName, 
-    rawPacket,
     connect, 
     disconnect, 
     setResistance 
@@ -48,16 +45,14 @@ export default function App() {
   const maxHeartRateRef = useRef(0);
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [manualElapsedTime, setManualElapsedTime] = useState(0);
-  const [showDebug, setShowDebug] = useState(false); // 调试面板开关
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 初始化历史记录
   useEffect(() => {
     setWorkoutHistory(loadHistory());
   }, []);
 
-  // 手动计时逻辑，点开始立刻走字
+  // 手动计时（点开始就走）
   useEffect(() => {
     if (isWorkoutActive) {
       timerRef.current = setInterval(() => {
@@ -69,7 +64,7 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isWorkoutActive]);
 
-  // 记录心率峰值
+  // 心率峰值记录
   useEffect(() => {
     if (isConnected && stats.heartRate > 0) {
       if (stats.heartRate > maxHeartRateRef.current) {
@@ -107,7 +102,7 @@ export default function App() {
     await setResistance(v);
   }, [setResistance]);
 
-  // 开始按钮逻辑
+  // 开始按钮
   const handleStart = () => {
     if (!isConnected) {
       alert('请先连接椭圆机');
@@ -118,13 +113,13 @@ export default function App() {
     maxHeartRateRef.current = 0;
   };
 
-  // 停止按钮逻辑
+  // 停止按钮
   const handleStop = () => {
     setIsWorkoutActive(false);
     saveWorkoutRecord();
   };
 
-  // 清空历史记录
+  // 清空记录
   const clearHistory = () => {
     if (confirm('确定清空所有运动记录？')) {
       setWorkoutHistory([]);
@@ -132,7 +127,7 @@ export default function App() {
     }
   };
 
-  // 导出记录
+  // 导出/导入
   const handleExport = () => {
     const blob = new Blob([JSON.stringify(workoutHistory, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
@@ -142,7 +137,6 @@ export default function App() {
     URL.revokeObjectURL(a.href);
   };
 
-  // 导入记录
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -157,25 +151,23 @@ export default function App() {
           alert('导入成功');
         }
       } catch {
-        alert('文件格式错误，导入失败');
+        alert('文件格式错误');
       }
     };
     r.readAsText(f);
     e.target.value = '';
   };
 
-  // 显示时长：运动中用手动计时，静止用设备时长
   const displayTime = isWorkoutActive ? manualElapsedTime : stats.elapsedTime;
 
   return (
     <div className="min-h-screen bg-black text-white p-2 font-sans">
-      {/* 顶部标题+控制栏 */}
       <header className="flex items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2">
           <div className="bg-amber-500 p-1.5 rounded-lg">
             <Activity className="text-black w-5 h-5" />
           </div>
-          <h1 className="font-bold text-xl">MOBI 2.0</h1>
+          <h1 className="font-bold text-xl">MOBI 2.3</h1>
         </div>
 
         <div className="flex gap-1 flex-1 max-w-[170px]">
@@ -205,43 +197,21 @@ export default function App() {
       </header>
 
       <main className="space-y-2">
-        {/* 错误提示 */}
         {error && (
           <div className="bg-rose-500/10 border border-rose-500/20 rounded-2xl p-2 text-xs">
             {error}
           </div>
         )}
 
-        {/* 调试面板开关 */}
-        <div className="flex justify-end">
-          <button 
-            onClick={() => setShowDebug(!showDebug)}
-            className="flex items-center gap-1 text-xs text-cyan-400"
-          >
-            <Bug size={12} /> {showDebug ? '隐藏调试' : '显示调试'}
-          </button>
-        </div>
-
-        {/* 调试面板 */}
-        {showDebug && (
-          <div className="bg-zinc-900 rounded-2xl p-3 border border-cyan-500/30 text-xs font-mono">
-            <div className="mb-1">设备名: {deviceName}</div>
-            <div className="mb-1">当前协议: {protocol}</div>
-            <div className="mb-1">心率原始值: {stats.heartRateRaw}</div>
-            <div className="mb-1">原始数据包: [{rawPacket.join(', ')}]</div>
-            <div className="text-cyan-400">请打开浏览器F12控制台查看完整日志</div>
-          </div>
-        )}
-
-        {/* 第一行：功率+时长 */}
+        {/* 功率+时长 */}
         <div className="flex gap-2">
-          <div className='flex-1 bg-gradient-to-br from-zinc-800 to-black rounded-2xl p-3 border border-white/5'>
+          <div className='flex-1 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <Zap className='text-amber-500 w-3 h-3' /> 瞬时功率
             </div>
-            <div className='text-3xl font-bold'>{stats.instantPower ?? 0} <span className='text-zinc-600 text-xs'>W</span></div>
+            <div className='text-3xl font-bold'>{stats.instantPower ?? 0} W</div>
           </div>
-          <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+          <div className='flex-1 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <Timer className='text-purple-400 w-3 h-3' /> 时长
             </div>
@@ -249,37 +219,37 @@ export default function App() {
           </div>
         </div>
 
-        {/* 第二行：心率+热量 */}
+        {/* 心率+热量 */}
         <div className="flex gap-2">
-          <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+          <div className='flex-1 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <Heart className='text-red-500 w-3 h-3' /> 心率
             </div>
-            <div className='text-3xl font-bold'>{stats.heartRate ?? 0} <span className='text-zinc-600 text-xs'>BPM</span></div>
+            <div className='text-3xl font-bold'>{stats.heartRate ?? 0} BPM</div>
           </div>
-          <div className='flex-1 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+          <div className='flex-1 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <Flame className='text-orange-500 w-3 h-3' /> 热量
             </div>
-            <div className='text-3xl font-bold'>{(stats.kcal ?? 0).toFixed(0)} <span className='text-zinc-600 text-xs'>KCAL</span></div>
+            <div className='text-3xl font-bold'>{(stats.kcal ?? 0).toFixed(0)} KCAL</div>
           </div>
         </div>
 
-        {/* 第三行：踏频+速度+距离 */}
+        {/* 踏频+速度+距离 */}
         <div className="flex gap-2">
-          <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+          <div className='w-1/3 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <RotateCcw className='text-blue-400 w-3 h-3' /> 踏频
             </div>
-            <div className='text-3xl font-bold'>{stats.instantCadence ?? 0} <span className='text-zinc-600 text-xs'>RPM</span></div>
+            <div className='text-3xl font-bold'>{stats.instantCadence ?? 0} RPM</div>
           </div>
-          <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+          <div className='w-1/3 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <Gauge className='text-emerald-400 w-3 h-3' /> 速度
             </div>
             <div className='text-3xl font-bold'>{(stats.instantSpeed ?? 0).toFixed(1)}</div>
           </div>
-          <div className='w-1/3 bg-zinc-900/50 rounded-2xl p-3 border border-white/5'>
+          <div className='w-1/3 bg-zinc-800 rounded-2xl p-3 border border-white/5'>
             <div className='flex items-center gap-1 text-zinc-500 text-[10px] mb-1'>
               <MapPin className='text-pink-400 w-3 h-3' /> 距离
             </div>
@@ -288,71 +258,35 @@ export default function App() {
         </div>
 
         {/* 阻力调节 */}
-        <div className="bg-zinc-900 rounded-2xl p-3 border border-white/5">
+        <div className="bg-zinc-800 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
               <div className='text-zinc-500 text-[10px]'>阻力</div>
               <div className="text-2xl font-bold text-amber-500">L{uiResistance}</div>
             </div>
-            <div className='text-zinc-600 text-[10px]'>1-24档</div>
           </div>
           <input
             type="range" min="1" max="24" value={uiResistance}
             onChange={(e) => setUiResistance(+e.target.value)}
             onMouseUp={() => updateResistance(uiResistance)}
-            className="w-full h-2 bg-zinc-800 rounded-full appearance-none accent-amber-500 mb-2"
+            className="w-full h-2 bg-zinc-700 rounded-full accent-amber-500 mb-2"
           />
           <div className="flex gap-1">
-            <button onClick={() => updateResistance(uiResistance - 1)} className='flex-1 h-10 bg-zinc-800 rounded-xl'>
-              <Minus size={16} />
-            </button>
-            <button onClick={() => updateResistance(uiResistance + 1)} className='flex-1 h-10 bg-zinc-800 rounded-xl'>
-              <Plus size={16} />
-            </button>
-            {[1, 12, 24].map(l => (
-              <button key={l} onClick={() => updateResistance(l)} className='px-2 h-10 rounded-xl text-xs bg-zinc-800'>
-                {l}
-              </button>
-            ))}
+            <button onClick={() => updateResistance(uiResistance - 1)} className='flex-1 h-10 bg-zinc-700 rounded-xl'>-</button>
+            <button onClick={() => updateResistance(uiResistance + 1)} className='flex-1 h-10 bg-zinc-700 rounded-xl'>+</button>
           </div>
         </div>
 
-        {/* 运动历史记录 */}
-        <div className="bg-zinc-900 rounded-2xl p-2 border border-white/5">
+        {/* 运动记录 */}
+        <div className="bg-zinc-800 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center">
-            <div className='flex items-center gap-1 text-sm font-bold'>
-              <History className='text-blue-400 w-4 h-4' /> 运动记录
-            </div>
+            <div className='text-sm font-bold'>运动记录</div>
             <div className="flex gap-2">
-              <button onClick={handleExport} className='text-green-400 text-xs flex items-center gap-1'>
-                <Download size={12} />导出
-              </button>
-              <button onClick={() => fileInputRef.current?.click()} className='text-cyan-400 text-xs flex items-center gap-1'>
-                <Upload size={12} />导入
-              </button>
-              <button onClick={clearHistory} className='text-rose-500'>
-                <Trash2 size={12} />
-              </button>
+              <button onClick={handleExport} className="text-xs">导出</button>
+              <button onClick={() => fileInputRef.current?.click()}>导入</button>
+              <button onClick={clearHistory} className='text-rose-500'><Trash2 size={12} /></button>
               <input ref={fileInputRef} type="file" accept=".json" onChange={handleImport} className="hidden" />
             </div>
-          </div>
-          <div className="max-h-28 overflow-y-auto space-y-1 mt-1">
-            {workoutHistory.length === 0 ? (
-              <div className='text-center text-zinc-500 text-xs py-1'>暂无运动记录</div>
-            ) : (
-              workoutHistory.map(item => (
-                <div key={item.id} className='p-2 bg-zinc-800/50 rounded-xl text-[10px] leading-relaxed'>
-                  <div className="flex justify-between text-zinc-400">
-                    <span>{item.date.slice(5, -3)}</span>
-                    <span>阻力 L{item.resistance}</span>
-                  </div>
-                  <div className="flex justify-between mt-1">
-                    <span>{item.duration} • {item.kcal}kcal • {item.distance}km</span>
-                    <span>平均{item.avgHeartRate} • 峰值{item.maxHeartRate} BPM</span>
-                  </div>
-                </div>
-              ))
-            )}
           </div>
         </div>
       </main>
