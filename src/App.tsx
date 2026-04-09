@@ -84,18 +84,21 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isWorkoutActive]);
 
-  // 🔥 心率数据采集（峰值 + 样本用于平均）
+  // 🔥 心率数据采集（峰值 + 样本用于平均）- 过滤255无效值
   useEffect(() => {
     if (isConnected && isWorkoutActive && stats.heartRate > 0) {
       const hr = stats.heartRate;
+      // 🔥 过滤掉255等无效值
+      if (hr < 30 || hr > 200) return;
+      
       // 更新峰值
       if (hr > maxHeartRateRef.current) {
         maxHeartRateRef.current = hr;
       }
       // 收集样本（每秒1个，避免数组过大）
       heartRateSamplesRef.current.push(hr);
-      // 限制样本数量（最多300个 = 5分钟）
-      if (heartRateSamplesRef.current.length > 300) {
+      // 限制样本数量（最多600个 = 10分钟）
+      if (heartRateSamplesRef.current.length > 600) {
         heartRateSamplesRef.current.shift();
       }
     }
@@ -111,18 +114,18 @@ export default function App() {
       return;
     }
 
-    // 计算平均心率
+    // 计算平均心率（过滤无效值）
     const samples = heartRateSamplesRef.current.filter(hr => hr >= 30 && hr <= 200);
     const avgHeartRate = samples.length > 0 
       ? Math.round(samples.reduce((a, b) => a + b, 0) / samples.length)
-      : (stats.heartRate >= 30 ? stats.heartRate : 0);
+      : 0;
 
     const record: WorkoutRecord = {
       id: Date.now().toString(),
       date: new Date().toLocaleString('zh-CN'),
       duration: formatTime(durationSec),
       kcal: Math.round(stats.kcal || 0),
-      distance: ((stats.totalDistance || 0) / 1000).toFixed(2), // 米→公里
+      distance: ((stats.totalDistance || 0) / 1000).toFixed(2),
       avgHeartRate: avgHeartRate,
       maxHeartRate: maxHeartRateRef.current,
       resistance: uiResistance,
@@ -163,9 +166,7 @@ export default function App() {
 
   // 停止按钮 🔥 关键修复：先保存再停止
   const handleStop = () => {
-    // 先保存记录（此时数据还是最新的）
     saveWorkoutRecord();
-    // 再停止状态
     setIsWorkoutActive(false);
   };
 
@@ -178,7 +179,7 @@ export default function App() {
     }
   };
 
-  // 🔥 导出优化：空数据提示 + 错误处理
+  // 🔥 导出优化
   const handleExport = () => {
     if (workoutHistory.length === 0) {
       alert('暂无运动记录可导出');
@@ -198,12 +199,11 @@ export default function App() {
     }
   };
 
-  // 🔥 导入优化：数据合并 + 重复检查 + 错误处理
+  // 🔥 导入优化
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     
-    // 检查文件类型
     if (!f.name.endsWith('.json')) {
       alert('请选择 .json 格式的文件');
       e.target.value = '';
@@ -218,7 +218,6 @@ export default function App() {
           throw new Error('文件格式不正确');
         }
         
-        // 过滤无效记录
         const validRecords = arr.filter((item: any) => 
           item?.id && item?.date && typeof item?.kcal === 'number'
         );
@@ -228,7 +227,6 @@ export default function App() {
           return;
         }
         
-        // 🔥 合并时避免重复（按 id 去重）
         const existingIds = new Set(workoutHistory.map(r => r.id));
         const newRecords = validRecords.filter((r: WorkoutRecord) => !existingIds.has(r.id));
         
@@ -237,7 +235,6 @@ export default function App() {
           return;
         }
         
-        // 🔥 使用函数式更新
         setWorkoutHistory(prev => {
           const merged = [...newRecords, ...prev];
           saveHistory(merged);
@@ -254,10 +251,9 @@ export default function App() {
       alert('文件读取失败，请重试');
     };
     r.readAsText(f);
-    e.target.value = ''; // 允许重复选择同一文件
+    e.target.value = '';
   };
 
-  // 显示时间：运动中用手动计时，否则用设备计时
   const displayTime = isWorkoutActive ? manualElapsedTime : stats.elapsedTime;
 
   return (
@@ -267,7 +263,8 @@ export default function App() {
           <div className="bg-amber-500 p-1.5 rounded-lg">
             <Activity className="text-black w-5 h-5" />
           </div>
-          <h1 className="font-bold text-xl">MOBI 2.3</h1>
+          {/* 🔥 版本号改为 3.0 */}
+          <h1 className="font-bold text-xl">MOBI 3.0</h1>
         </div>
 
         <div className="flex gap-1 flex-1 max-w-[170px]">
@@ -357,7 +354,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 🔥 阻力调节 - 新增快捷档位 10 / 24 */}
+        {/* 🔥 阻力调节 - 调整按钮比例：-/+ 加长，L10/L24 缩短 */}
         <div className="bg-zinc-800 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
@@ -373,15 +370,16 @@ export default function App() {
             className="w-full h-2 bg-zinc-700 rounded-full accent-amber-500 mb-2"
           />
           <div className="flex gap-1">
-            <button onClick={() => updateResistance(uiResistance - 1)} className='flex-1 h-10 bg-zinc-700 rounded-xl text-sm font-bold'>-</button>
-            <button onClick={() => updateResistance(uiResistance + 1)} className='flex-1 h-10 bg-zinc-700 rounded-xl text-sm font-bold'>+</button>
-            {/* 🔥 新增快捷档位 */}
-            <button onClick={() => updateResistance(10)} className='flex-1 h-10 bg-amber-600/80 hover:bg-amber-600 rounded-xl text-xs font-bold'>L10</button>
-            <button onClick={() => updateResistance(24)} className='flex-1 h-10 bg-rose-600/80 hover:bg-rose-600 rounded-xl text-xs font-bold'>L24</button>
+            {/* 🔥 -/+ 按钮加长：flex-[2] */}
+            <button onClick={() => updateResistance(uiResistance - 1)} className='flex-[2] h-10 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm font-bold transition'>-</button>
+            <button onClick={() => updateResistance(uiResistance + 1)} className='flex-[2] h-10 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm font-bold transition'>+</button>
+            {/* 🔥 L10/L24 按钮缩短：flex-1 (约1/3宽度) */}
+            <button onClick={() => updateResistance(10)} className='flex-1 h-10 bg-amber-600/80 hover:bg-amber-600 rounded-xl text-[10px] font-bold transition'>L10</button>
+            <button onClick={() => updateResistance(24)} className='flex-1 h-10 bg-rose-600/80 hover:bg-rose-600 rounded-xl text-[10px] font-bold transition'>L24</button>
           </div>
         </div>
 
-        {/* 运动记录 */}
+        {/* 运动记录 - 🔥 增加平均心率显示 */}
         <div className="bg-zinc-800 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center px-2 py-1">
             <div className='text-sm font-bold flex items-center gap-1'>
@@ -401,20 +399,38 @@ export default function App() {
             </div>
           </div>
           
-          {/* 🔥 记录列表展示（可选：如果后续需要展示历史记录） */}
+          {/* 🔥 记录列表：显示 日期 | 时长 | kcal | km | 平均心率 */}
           {workoutHistory.length > 0 && (
-            <div className="mt-2 max-h-40 overflow-y-auto space-y-1 px-2">
-              {workoutHistory.slice(0, 5).map(record => (
-                <div key={record.id} className="text-[10px] text-zinc-400 flex justify-between py-1 border-b border-zinc-700/50">
-                  <span>{record.date.split(' ')[0]} {record.duration}</span>
-                  <span>{record.kcal}kcal • {record.distance}km</span>
+            <div className="mt-2 max-h-48 overflow-y-auto space-y-1 px-2">
+              {workoutHistory.slice(0, 10).map(record => (
+                <div key={record.id} className="text-[10px] text-zinc-300 flex justify-between items-center py-1.5 px-1 rounded hover:bg-zinc-700/50 transition">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-zinc-400">{record.date.split(' ')[0]}</span>
+                    <span className="font-medium">{record.duration}</span>
+                  </div>
+                  <div className="flex flex-col items-end gap-0.5">
+                    <span className="text-amber-400 font-bold">{record.kcal}kcal</span>
+                    <span className="text-zinc-400">{record.distance}km</span>
+                  </div>
+                  {/* 🔥 新增：平均心率显示 */}
+                  <div className="flex items-center gap-1 pl-2 border-l border-zinc-600">
+                    <Heart size={10} className="text-red-500" />
+                    <span className={record.avgHeartRate > 0 ? 'font-bold text-red-400' : 'text-zinc-500'}>
+                      {record.avgHeartRate > 0 ? `${record.avgHeartRate}` : '-'}
+                    </span>
+                  </div>
                 </div>
               ))}
-              {workoutHistory.length > 5 && (
+              {workoutHistory.length > 10 && (
                 <div className="text-[10px] text-zinc-500 text-center py-1">
-                  + {workoutHistory.length - 5} 条更多记录
+                  + {workoutHistory.length - 10} 条更多记录
                 </div>
               )}
+            </div>
+          )}
+          {workoutHistory.length === 0 && (
+            <div className="text-[10px] text-zinc-500 text-center py-3">
+              暂无运动记录，开始锻炼吧！🚴
             </div>
           )}
         </div>
