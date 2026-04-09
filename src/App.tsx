@@ -25,6 +25,7 @@ const formatTime = (seconds: number) => {
 
 const STORAGE_KEY = 'MOBI_WORKOUT_HISTORY';
 
+// 🔥 修复：补充参数名 data
 const saveHistory = (data: WorkoutRecord[]) => {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
@@ -58,9 +59,10 @@ export default function App() {
   const [uiResistance, setUiResistance] = useState(10);
   const [workoutHistory, setWorkoutHistory] = useState<WorkoutRecord[]>([]);
   
-  // 🔥 心率统计用 ref（避免闭包问题）
+  // 🔥 心率统计 Ref（全程平均：累加和 + 有效计数，内存 O(1)）
   const maxHeartRateRef = useRef(0);
-  const heartRateSamplesRef = useRef<number[]>([]);
+  const heartRateSumRef = useRef(0);
+  const heartRateCountRef = useRef(0);
   
   const [isWorkoutActive, setIsWorkoutActive] = useState(false);
   const [manualElapsedTime, setManualElapsedTime] = useState(0);
@@ -72,7 +74,7 @@ export default function App() {
     setWorkoutHistory(loadHistory());
   }, []);
 
-  // 🔥 手动计时器（点开始就走）
+  // 手动计时器
   useEffect(() => {
     if (isWorkoutActive) {
       timerRef.current = setInterval(() => {
@@ -84,40 +86,33 @@ export default function App() {
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isWorkoutActive]);
 
-  // 🔥 心率数据采集（峰值 + 样本用于平均）- 过滤255无效值
+  // 🔥 心率数据采集（全程平均模式）
   useEffect(() => {
     if (isConnected && isWorkoutActive && stats.heartRate > 0) {
       const hr = stats.heartRate;
-      // 🔥 过滤掉255等无效值
+      // 双重保险：过滤无效值 (Hook 层已过滤，此处防漏)
       if (hr < 30 || hr > 200) return;
       
-      // 更新峰值
       if (hr > maxHeartRateRef.current) {
         maxHeartRateRef.current = hr;
       }
-      // 收集样本（每秒1个，避免数组过大）
-      heartRateSamplesRef.current.push(hr);
-      // 限制样本数量（最多600个 = 10分钟）
-      if (heartRateSamplesRef.current.length > 600) {
-        heartRateSamplesRef.current.shift();
-      }
+      // 🔥 累加计算全程平均（无论运动多久，都是从头到尾的平均值）
+      heartRateSumRef.current += hr;
+      heartRateCountRef.current += 1;
     }
   }, [stats.heartRate, isConnected, isWorkoutActive]);
 
-  // 🔥 保存运动记录（修复闭包 + 平均心率计算）
+  // 保存运动记录
   const saveWorkoutRecord = useCallback(() => {
     const durationSec = manualElapsedTime;
-    
-    // 运动时间太短不保存
     if (durationSec < 5) {
       console.log('运动时间不足5秒，不保存记录');
       return;
     }
 
-    // 计算平均心率（过滤无效值）
-    const samples = heartRateSamplesRef.current.filter(hr => hr >= 30 && hr <= 200);
-    const avgHeartRate = samples.length > 0 
-      ? Math.round(samples.reduce((a, b) => a + b, 0) / samples.length)
+    // 🔥 全程平均心率计算
+    const avgHeartRate = heartRateCountRef.current > 0 
+      ? Math.round(heartRateSumRef.current / heartRateCountRef.current)
       : 0;
 
     const record: WorkoutRecord = {
@@ -131,16 +126,17 @@ export default function App() {
       resistance: uiResistance,
     };
 
-    // 🔥 使用函数式更新避免闭包问题
+    // 函数式更新避免闭包陷阱
     setWorkoutHistory(prevHistory => {
       const newHistory = [record, ...prevHistory];
       saveHistory(newHistory);
       return newHistory;
     });
 
-    // 重置心率统计
+    // 重置统计
     maxHeartRateRef.current = 0;
-    heartRateSamplesRef.current = [];
+    heartRateSumRef.current = 0;
+    heartRateCountRef.current = 0;
     
     console.log('✅ 运动记录已保存:', record);
   }, [manualElapsedTime, stats, uiResistance]);
@@ -160,11 +156,13 @@ export default function App() {
     }
     setManualElapsedTime(0);
     setIsWorkoutActive(true);
+    // 重置心率统计
     maxHeartRateRef.current = 0;
-    heartRateSamplesRef.current = [];
+    heartRateSumRef.current = 0;
+    heartRateCountRef.current = 0;
   };
 
-  // 停止按钮 🔥 关键修复：先保存再停止
+  // 停止按钮
   const handleStop = () => {
     saveWorkoutRecord();
     setIsWorkoutActive(false);
@@ -179,7 +177,7 @@ export default function App() {
     }
   };
 
-  // 🔥 导出优化
+  // 导出优化
   const handleExport = () => {
     if (workoutHistory.length === 0) {
       alert('暂无运动记录可导出');
@@ -199,7 +197,7 @@ export default function App() {
     }
   };
 
-  // 🔥 导入优化
+  // 导入优化
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
@@ -214,14 +212,11 @@ export default function App() {
     r.onload = (ev) => {
       try {
         const arr = JSON.parse(ev.target?.result as string);
-        if (!Array.isArray(arr)) {
-          throw new Error('文件格式不正确');
-        }
+        if (!Array.isArray(arr)) throw new Error('文件格式不正确');
         
         const validRecords = arr.filter((item: any) => 
           item?.id && item?.date && typeof item?.kcal === 'number'
         );
-        
         if (validRecords.length === 0) {
           alert('文件中没有有效的运动记录');
           return;
@@ -229,7 +224,6 @@ export default function App() {
         
         const existingIds = new Set(workoutHistory.map(r => r.id));
         const newRecords = validRecords.filter((r: WorkoutRecord) => !existingIds.has(r.id));
-        
         if (newRecords.length === 0) {
           alert('导入的记录已存在，无需重复添加');
           return;
@@ -241,15 +235,12 @@ export default function App() {
           alert(`✅ 成功导入 ${newRecords.length} 条记录`);
           return merged;
         });
-        
       } catch (err) {
         console.error('导入失败:', err);
         alert('❌ 文件解析失败，请检查文件格式');
       }
     };
-    r.onerror = () => {
-      alert('文件读取失败，请重试');
-    };
+    r.onerror = () => alert('文件读取失败，请重试');
     r.readAsText(f);
     e.target.value = '';
   };
@@ -263,8 +254,8 @@ export default function App() {
           <div className="bg-amber-500 p-1.5 rounded-lg">
             <Activity className="text-black w-5 h-5" />
           </div>
-          {/* 🔥 版本号改为 3.0 */}
-          <h1 className="font-bold text-xl">MOBI 3.0</h1>
+          {/* 🔥 版本号 v3.1 */}
+          <h1 className="font-bold text-xl">MOBI 3.1</h1>
         </div>
 
         <div className="flex gap-1 flex-1 max-w-[170px]">
@@ -354,7 +345,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 🔥 阻力调节 - 调整按钮比例：-/+ 加长，L10/L24 缩短 */}
+        {/* 🔥 阻力调节：-/+ 加长，L10/L24 缩短至约 1/3 宽度 */}
         <div className="bg-zinc-800 rounded-2xl p-3 border border-white/5">
           <div className="flex justify-between items-center mb-2">
             <div>
@@ -370,16 +361,15 @@ export default function App() {
             className="w-full h-2 bg-zinc-700 rounded-full accent-amber-500 mb-2"
           />
           <div className="flex gap-1">
-            {/* 🔥 -/+ 按钮加长：flex-[2] */}
-            <button onClick={() => updateResistance(uiResistance - 1)} className='flex-[2] h-10 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm font-bold transition'>-</button>
-            <button onClick={() => updateResistance(uiResistance + 1)} className='flex-[2] h-10 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm font-bold transition'>+</button>
-            {/* 🔥 L10/L24 按钮缩短：flex-1 (约1/3宽度) */}
+            {/* 🔥 flex-[3] 占 3/8 宽度，L10/L24 占 1/8 宽度，比例 3:1 */}
+            <button onClick={() => updateResistance(uiResistance - 1)} className='flex-[3] h-10 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm font-bold transition'>-</button>
+            <button onClick={() => updateResistance(uiResistance + 1)} className='flex-[3] h-10 bg-zinc-700 hover:bg-zinc-600 rounded-xl text-sm font-bold transition'>+</button>
             <button onClick={() => updateResistance(10)} className='flex-1 h-10 bg-amber-600/80 hover:bg-amber-600 rounded-xl text-[10px] font-bold transition'>L10</button>
             <button onClick={() => updateResistance(24)} className='flex-1 h-10 bg-rose-600/80 hover:bg-rose-600 rounded-xl text-[10px] font-bold transition'>L24</button>
           </div>
         </div>
 
-        {/* 运动记录 - 🔥 增加平均心率显示 */}
+        {/* 🔥 运动记录：显示 日期 | 时长 | kcal | km | 平均心率 */}
         <div className="bg-zinc-800 rounded-2xl p-2 border border-white/5">
           <div className="flex justify-between items-center px-2 py-1">
             <div className='text-sm font-bold flex items-center gap-1'>
@@ -399,7 +389,6 @@ export default function App() {
             </div>
           </div>
           
-          {/* 🔥 记录列表：显示 日期 | 时长 | kcal | km | 平均心率 */}
           {workoutHistory.length > 0 && (
             <div className="mt-2 max-h-48 overflow-y-auto space-y-1 px-2">
               {workoutHistory.slice(0, 10).map(record => (
@@ -412,8 +401,8 @@ export default function App() {
                     <span className="text-amber-400 font-bold">{record.kcal}kcal</span>
                     <span className="text-zinc-400">{record.distance}km</span>
                   </div>
-                  {/* 🔥 新增：平均心率显示 */}
-                  <div className="flex items-center gap-1 pl-2 border-l border-zinc-600">
+                  {/* 🔥 平均心率列 */}
+                  <div className="flex items-center gap-1 pl-2 border-l border-zinc-600 ml-2">
                     <Heart size={10} className="text-red-500" />
                     <span className={record.avgHeartRate > 0 ? 'font-bold text-red-400' : 'text-zinc-500'}>
                       {record.avgHeartRate > 0 ? `${record.avgHeartRate}` : '-'}
