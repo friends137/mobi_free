@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef } from 'react';
 
-// 匹配你的设备 MB-MEH-3202G 完整UUID
+// 你的设备 MB-MEH-3202G 专属FTMS UUID
 export const UUIDS = {
   FTMS: {
     SERVICE: "00001826-0000-1000-8000-00805f9b34fb",
@@ -17,7 +17,6 @@ export interface BikeStats {
   elapsedTime: number;
   kcal: number;
   heartRate: number;
-  heartRateRaw: number;
 }
 
 const INITIAL_STATS: BikeStats = {
@@ -28,46 +27,37 @@ const INITIAL_STATS: BikeStats = {
   elapsedTime: 0,
   kcal: 0,
   heartRate: 0,
-  heartRateRaw: 0,
 };
 
 // ======================
-// 🔥 终极修复：加长度判断，杜绝越界报错！
+// 🔥 终极修复：FTMS标准协议 Flag动态解析（解决数据全0）
 // ======================
-const parsers = {
-  FTMS: (data: DataView): BikeStats => {
-    // 关键：数据包长度不足，直接返回，不解析
-    if (data.byteLength < 16) {
-      return INITIAL_STATS;
-    }
+const parseFTMS = (data: DataView): BikeStats => {
+  // 过滤短数据包，杜绝越界报错
+  if (data.byteLength < 8) return INITIAL_STATS;
 
-    console.log('【FTMS解析】有效数据包:', Array.from(new Uint8Array(data.buffer)));
-    let offset = 2;
-    const flags = data.getUint16(0, true);
-    
-    try {
-      const instantSpeed = data.getUint16(offset, true) / 100; offset += 2;
-      const instantCadence = data.getUint16(offset, true) / 2; offset += 2;
-      const totalDistance = data.getUint32(offset, true); offset += 4;
-      const instantPower = data.getUint16(offset, true); offset += 2;
-      const elapsedTime = data.getUint16(offset, true); offset += 2;
-      const kcal = data.getUint16(offset, true); offset += 2;
-      
-      const heartRateRaw = data.byteLength > offset ? data.getUint8(offset) : 0;
-      const heartRate = (heartRateRaw === 255) ? 0 : heartRateRaw;
+  const stats = { ...INITIAL_STATS };
+  let offset = 0;
+  const flags = data.getUint16(offset, true); offset += 2;
 
-      return {
-        instantSpeed, instantCadence, totalDistance, instantPower,
-        elapsedTime, kcal, heartRate, heartRateRaw
-      };
-    } catch (e) {
-      return INITIAL_STATS;
-    }
-  },
-};
+  // 按FTMS标准，根据Flag位读取对应数据
+  if (flags & 0x01) { offset += 2; } // 瞬时速度
+  if (flags & 0x02) { stats.instantCadence = data.getUint16(offset, true) / 2; offset += 2; }
+  if (flags & 0x04) { stats.totalDistance = data.getUint32(offset, true); offset += 4; }
+  if (flags & 0x08) { stats.instantPower = data.getUint16(offset, true); offset += 2; }
+  if (flags & 0x10) { stats.elapsedTime = data.getUint16(offset, true); offset += 2; }
+  if (flags & 0x20) { stats.kcal = data.getUint16(offset, true); offset += 2; }
+  if (flags & 0x40) { // 心率
+    const heartRateRaw = data.getUint8(offset);
+    stats.heartRate = heartRateRaw === 255 ? 0 : heartRateRaw;
+    offset += 1;
+  }
 
-const protocolCommands = {
-  FTMS: (level: number) => new Uint8Array([0x04, 0x00, level]),
+  // 强制读取速度（兼容你的设备）
+  offset = 2;
+  stats.instantSpeed = data.getUint16(offset, true) / 100;
+
+  return stats;
 };
 
 export function useBluetooth() {
@@ -95,7 +85,7 @@ export function useBluetooth() {
       await chr.startNotifications();
       chr.addEventListener('characteristicvaluechanged', (e) => {
         const v = (e.target as BluetoothRemoteGATTCharacteristic).value;
-        if (v) setStats(parsers.FTMS(v));
+        if (v) setStats(parseFTMS(v));
       });
 
       controlPoint.current = await service.getCharacteristic(UUIDS.FTMS.CONTROL_POINT);
