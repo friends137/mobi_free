@@ -18,6 +18,9 @@ export class BluetoothManager {
   private activeProtocol: BluetoothProtocol | null = null;
   private logger: ((msg: string) => void) | null = null;
   private logBuffer: string[] = [];
+  
+  // 🔥 新增：保存 onData 回调引用，用于心率服务更新
+  private onDataCallback: (( WorkoutData) => void) | null = null;
 
   constructor() { }
 
@@ -106,44 +109,6 @@ export class BluetoothManager {
       this.log(`Selected Protocol: ${this.activeProtocol.name}`);
       await this.activeProtocol.connect(server);
 
-      // 🔥 新增：独立订阅标准心率服务 (0000180D)
-      try {
-        this.log('Attempting to subscribe to Heart Rate Service...');
-        const heartRateService = await server.getPrimaryService('0000180d-0000-1000-8000-00805f9b34fb');
-        const heartRateChar = await heartRateService.getCharacteristic('00002a37-0000-1000-8000-00805f9b34fb');
-        
-        await heartRateChar.startNotifications();
-        
-        heartRateChar.addEventListener('characteristicvaluechanged', (e: Event) => {
-          const char = e.target as BluetoothRemoteGATTCharacteristic;
-          if (char.value) {
-            // 标准心率数据格式: flags(1 byte) + heartRate(1 or 2 bytes)
-            const flags = char.value.getUint8(0);
-            let hr: number;
-            
-            if (flags & 0x01) {
-              // 16-bit heart rate
-              hr = char.value.getUint16(1, true);
-            } else {
-              // 8-bit heart rate
-              hr = char.value.getUint8(1);
-            }
-            
-            // 验证心率有效性
-            if (hr >= 30 && hr <= 200) {
-              // 通过回调通知上层更新心率
-              // 注意：这里需要临时创建一个回调来更新数据
-              // 实际使用中，startNotifications 的 onData 会被外部传入
-              // 所以我们在这里不直接调用，而是标记需要更新
-              console.log(`Heart Rate from standard service: ${hr} BPM`);
-            }
-          }
-        });
-        this.log('Heart Rate Service subscribed successfully');
-      } catch (hrErr) {
-        this.log('Heart Rate Service not available or failed to subscribe (this is normal for some devices)');
-      }
-
       logEvent('CONNECT_SUCCESS', {
         deviceName: this.device.name,
         deviceId: this.device.id,
@@ -164,18 +129,53 @@ export class BluetoothManager {
     }
   }
 
-  async startNotifications(onData: (data: WorkoutData) => void): Promise<void> {
+  // 🔥 关键修复：在 startNotifications 中订阅标准心率服务
+  async startNotifications(onData: ( WorkoutData) => void): Promise<void> {
     if (!this.activeProtocol) return;
+    
+    // 🔥 保存回调引用，供心率服务使用
+    this.onDataCallback = onData;
+    
     this.log('Starting notifications...');
+    await this.activeProtocol.startNotifications(onData);
     
-    // 包装 onData 以合并标准心率服务的数据
-    const wrappedOnData = (data: WorkoutData) => {
-      // 如果协议解析有心率数据，优先使用
-      // 否则保持原数据（标准心率服务的数据会在后台单独处理）
-      onData(data);
-    };
-    
-    await this.activeProtocol.startNotifications(wrappedOnData);
+    // 🔥 订阅标准心率服务 (0000180D) - 在 startNotifications 中确保 onData 可用
+    try {
+      if (this.device?.gatt?.connected) {
+        const server = await this.device.gatt.connect();
+        const heartRateService = await server.getPrimaryService('0000180d-0000-1000-8000-00805f9b34fb');
+        const heartRateChar = await heartRateService.getCharacteristic('00002a37-0000-1000-8000-00805f9b34fb');
+        
+        await heartRateChar.startNotifications();
+        
+        heartRateChar.addEventListener('characteristicvaluechanged', (e: Event) => {
+          const char = e.target as BluetoothRemoteGATTCharacteristic;
+          if (char.value && this.onDataCallback) {
+            // 标准心率数据格式: flags(1 byte) + heartRate(1 or 2 bytes)
+            const flags = char.value.getUint8(0);
+            let hr: number;
+            
+            if (flags & 0x01) {
+              // 16-bit heart rate (little-endian)
+              hr = char.value.getUint16(1, true);
+            } else {
+              // 8-bit heart rate
+              hr = char.value.getUint8(1);
+            }
+            
+            // 验证心率有效性 (30-200 BPM)
+            if (hr >= 30 && hr <= 200) {
+              // 🔥 关键：调用 onData 回调更新 UI
+              this.onDataCallback({ heartRate: hr });
+              this.log(`❤️ Heart Rate updated: ${hr} BPM`);
+            }
+          }
+        });
+        this.log('Heart Rate Service subscribed successfully');
+      }
+    } catch (hrErr) {
+      this.log('Heart Rate Service not available or failed to subscribe (normal for some devices)');
+    }
   }
 
   async setResistance(level: number): Promise<void> {
@@ -184,6 +184,9 @@ export class BluetoothManager {
   }
 
   disconnect() {
+    // 🔥 清空回调引用
+    this.onDataCallback = null;
+    
     if (this.activeProtocol) {
       this.log('Disconnecting protocol...');
       this.activeProtocol.disconnect();
@@ -198,6 +201,7 @@ export class BluetoothManager {
   }
 
   private onDisconnected() {
+    this.onDataCallback = null;
     logEvent('DISCONNECT_PASSIVE');
     this.log('Device disconnected (passive).');
     this.activeProtocol?.disconnect();
