@@ -8,8 +8,6 @@ export const useBluetooth = () => {
   const [logs, setLogs] = useState<string[]>([]);
 
   const managerRef = useRef(new BluetoothManager());
-
-  // 记录上次收到有效运动数据的时间
   const lastActivityTimeRef = useRef(0);
 
   const [stats, setStats] = useState({
@@ -19,7 +17,7 @@ export const useBluetooth = () => {
     resistanceLevel: 10,
     totalDistance: 0,
     kcal: 0,
-    heartRate: 0,
+    heartRate: 0,  // ✅ 初始值设为 0，不是 255
     elapsedTime: 0
   });
 
@@ -28,18 +26,15 @@ export const useBluetooth = () => {
     setLogs(prev => [...prev.slice(-40), `${new Date().toLocaleTimeString()} - ${msg}`]);
   }, []);
 
-  // 注入 Logger 到 Manager
   useEffect(() => {
     managerRef.current.setLogger(log);
   }, [log]);
 
-  // 本地计时器逻辑
+  // 本地计时器
   useEffect(() => {
     if (!isConnected) return;
-
     const timer = setInterval(() => {
       const now = Date.now();
-      // 如果 5 秒内有活动数据，则增加计时
       if (now - lastActivityTimeRef.current < 5000) {
         setStats(prev => ({
           ...prev,
@@ -47,7 +42,6 @@ export const useBluetooth = () => {
         }));
       }
     }, 1000);
-
     return () => clearInterval(timer);
   }, [isConnected]);
 
@@ -59,7 +53,7 @@ export const useBluetooth = () => {
       const protocolName = await managerRef.current.connect();
       log(`Connected using protocol: ${protocolName}`);
 
-      // 重置数据
+      // 🔥 重置所有数据，包括心率
       setStats({
         instantSpeed: 0,
         instantCadence: 0,
@@ -67,7 +61,7 @@ export const useBluetooth = () => {
         resistanceLevel: 10,
         totalDistance: 0,
         kcal: 0,
-        heartRate: 0,
+        heartRate: 0,  // ✅ 明确重置为 0
         elapsedTime: 0
       });
       lastActivityTimeRef.current = 0;
@@ -75,18 +69,21 @@ export const useBluetooth = () => {
       setIsConnected(true);
 
       await managerRef.current.startNotifications((data) => {
-        // 检测是否有运动
+        // 检测运动状态
         if ((data.instantSpeed && data.instantSpeed > 0) || (data.instantCadence && data.instantCadence > 0)) {
           lastActivityTimeRef.current = Date.now();
         }
 
-        // 🔥 优化：心率数据特殊处理，避免被其他字段覆盖
+        // 🔥 关键修复：心率数据合并逻辑
         setStats(prev => {
           const newData = { ...prev, ...data };
-          // 如果新数据没有心率或心率为0，保留旧值（防止设备不发送心率时归零）
-          if (data.heartRate === undefined || data.heartRate === 0) {
-            newData.heartRate = prev.heartRate;
+          
+          // 如果新数据有心率且有效，使用新值；否则保留旧值
+          if (data.heartRate !== undefined && data.heartRate >= 30 && data.heartRate <= 200) {
+            newData.heartRate = data.heartRate;
           }
+          // 如果 heartRate 是 0/255/无效值，不要覆盖当前显示
+          
           return newData;
         });
       });
