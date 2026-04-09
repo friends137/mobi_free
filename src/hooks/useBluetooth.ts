@@ -17,7 +17,7 @@ export const useBluetooth = () => {
     resistanceLevel: 10,
     totalDistance: 0,
     kcal: 0,
-    heartRate: 0,  // ✅ 初始值设为 0，不是 255
+    heartRate: 0,
     elapsedTime: 0
   });
 
@@ -53,7 +53,7 @@ export const useBluetooth = () => {
       const protocolName = await managerRef.current.connect();
       log(`Connected using protocol: ${protocolName}`);
 
-      // 🔥 重置所有数据，包括心率
+      // 重置所有数据
       setStats({
         instantSpeed: 0,
         instantCadence: 0,
@@ -61,7 +61,7 @@ export const useBluetooth = () => {
         resistanceLevel: 10,
         totalDistance: 0,
         kcal: 0,
-        heartRate: 0,  // ✅ 明确重置为 0
+        heartRate: 0,
         elapsedTime: 0
       });
       lastActivityTimeRef.current = 0;
@@ -74,15 +74,21 @@ export const useBluetooth = () => {
           lastActivityTimeRef.current = Date.now();
         }
 
-        // 🔥 关键修复：心率数据合并逻辑
+        // 🔥 关键修复：心率数据过滤 + 合并逻辑
         setStats(prev => {
           const newData = { ...prev, ...data };
           
-          // 如果新数据有心率且有效，使用新值；否则保留旧值
-          if (data.heartRate !== undefined && data.heartRate >= 30 && data.heartRate <= 200) {
-            newData.heartRate = data.heartRate;
+          // 🔥 过滤无效心率值 (255/0/超出范围)
+          if (data.heartRate !== undefined) {
+            if (data.heartRate >= 30 && data.heartRate <= 200) {
+              // 有效心率：更新
+              newData.heartRate = data.heartRate;
+            } else if (data.heartRate === 0 || data.heartRate === 255) {
+              // 无效值：保持原值，不更新
+              newData.heartRate = prev.heartRate;
+            }
+            // 其他异常值也保持原值
           }
-          // 如果 heartRate 是 0/255/无效值，不要覆盖当前显示
           
           return newData;
         });
